@@ -1,0 +1,10 @@
+{
+  "name": "WAYMARK demo",
+  "short_name": "WAYMARK",
+  "description": "Accessible banking prototype. Demo only, no real money.",
+  "start_url": "./index.html#welcome",
+  "display": "standalone",
+  "background_color": "#f7f8f5",
+  "theme_color": "#14513d",
+  "lang": "en-NG"
+}

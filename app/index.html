@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en-NG" data-text-size="standard" data-contrast="standard" data-motion="standard">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="WAYMARK: an accessible banking prototype for blind and low-vision customers. Demo only, no real money.">
+  <meta name="theme-color" content="#14513d">
+  <title>WAYMARK demo</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.webmanifest">
+</head>
+<body>
+  <header class="app-header">
+    <p class="brand"><span class="brand__name">WAYMARK</span> <span class="brand__tag">Demo</span></p>
+    <nav id="app-nav" class="app-nav" aria-label="Main" hidden>
+      <ul>
+        <li><a href="#home" data-nav="home">Home</a></li>
+        <li><a href="#activity" data-nav="activity">Activity</a></li>
+        <li><a href="#pay" data-nav="pay">Pay</a></li>
+        <li><a href="#help" data-nav="help">Help</a></li>
+        <li><a href="#settings" data-nav="settings">Settings</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main" class="app-main"></main>
+
+  <footer class="app-footer">
+    <p>Demo only. No real bank accounts or money. Independent prototype for Zecathon 6.0, not a Zenith Bank service.</p>
+  </footer>
+
+  <div id="live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <noscript><p>WAYMARK needs JavaScript to run this demo.</p></noscript>
+  <script type="module" src="ui/app.js"></script>
+</body>
+</html>
