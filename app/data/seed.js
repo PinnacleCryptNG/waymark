@@ -1,7 +1,7 @@
 // All names, banks, account numbers and amounts here are invented for the demo.
 // Banks carry "(demo)" in their names so nothing reads as a real institution.
 
-export const DEMO_PHONE = '08000000000';
+// Any valid Nigerian mobile number signs in; it is held in memory during sign-in only.
 export const DEMO_OTP = '123456';
 
 export const BANKS = [

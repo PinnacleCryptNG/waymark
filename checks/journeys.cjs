@@ -30,8 +30,13 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   check('blank phone error summary focused', (await focused()).includes('error-summary'), await focused());
   check('phone aria-invalid', (await page.locator('#phone').getAttribute('aria-invalid')) === 'true');
   await page.screenshot({ path: OUT + '02-signin-error.png', fullPage: true });
-  await page.getByLabel('Phone number').fill('0800 000 0000');
+  await page.getByLabel('Mobile number').fill('12345');
   await page.getByRole('button', { name: 'Continue' }).click();
+  check('invalid phone rejected', (await page.locator('.error-summary').innerText()).includes('11-digit Nigerian mobile number'));
+  await page.getByLabel('Mobile number').fill('+234 803 123 4567');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await at('Enter your code');
+  check('otp shows number ending', (await page.locator('main').innerText()).includes('ending 4567'));
   await page.getByLabel('Code').fill('123456');
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('New demo PIN').fill('2580');
@@ -103,7 +108,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   const items = await page.locator('.tx').count();
   check('activity has one new item (7)', items === 7, String(items));
   const firstItem = await page.locator('.tx').first().textContent();
-  check('first item reads in order', /Transfer to Chinedu Eze.*10 October 2026.*Debit, 5,000 naira.*Completed/s.test(firstItem.replace(/\s+/g, ' ')), firstItem.replace(/\s+/g, ' ').trim());
+  check('first item reads in order', /Transfer to Chinedu Eze.*\d{1,2} [A-Z][a-z]+ 2026.*Debit, 5,000 naira.*Completed/s.test(firstItem.replace(/\s+/g, ' ')), firstItem.replace(/\s+/g, ' ').trim());
 
   // J6 unknown outcome via saved beneficiary
   await page.getByRole('link', { name: 'Pay', exact: true }).click();

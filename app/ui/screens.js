@@ -64,9 +64,8 @@ export function signin(state) {
     html: `${h1('Sign in to the demo')}
       ${errorSummary(errs)}
       <p>Step 1 of 3.</p>
-      <p class="demo-value">Demo phone number: ${dual('0800 000 0000', '0 8 0 0, 0 0 0, 0 0 0 0')}</p>
       <form data-form="phone" novalidate>
-        ${textField({ id: 'phone', label: 'Phone number', hint: 'Enter the demo number above. Do not use your own number.', error: errorFor(errs, 'phone'), value: state.form.phone ?? '', type: 'tel', inputmode: 'numeric' })}
+        ${textField({ id: 'phone', label: 'Mobile number', hint: 'Any Nigerian mobile number works in this demo, for example 0803 123 4567. It is not stored or sent anywhere.', error: errorFor(errs, 'phone'), value: state.form.phone ?? '', type: 'tel', inputmode: 'tel' })}
         <button class="button" type="submit">Continue</button>
       </form>`,
   };
@@ -79,7 +78,7 @@ export function otp(state) {
     html: `${h1('Enter your code')}
       ${errorSummary(errs)}
       <p>Step 2 of 3.</p>
-      <p>A real bank would text you a code. In this demo the code is printed here.</p>
+      <p>A real bank would text a code to your number ending ${dual(String(state.form.phoneNumber ?? '').slice(-4), String(state.form.phoneNumber ?? '').slice(-4).split('').join(' '))}. In this demo the code is printed here.</p>
       <p class="demo-value">Demo code: ${dual(DEMO_OTP, DEMO_OTP.split('').join(' '))}</p>
       <p>This code does not expire. Take as long as you need.</p>
       <form data-form="otp" novalidate>

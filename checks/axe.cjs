@@ -29,7 +29,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:8080/';
     await page.getByRole('link', { name: 'Start the demo' }).click(); await at('Sign in');
     await page.getByRole('button', { name: 'Continue' }).click();
     await scan(`${mode}/signin-with-error`);
-    await page.getByLabel('Phone number').fill('08000000000');
+    await page.getByLabel('Mobile number').fill('08000000000');
     await page.getByRole('button', { name: 'Continue' }).click(); await at('Enter your code');
     await scan(`${mode}/otp`);
     await page.getByLabel('Code').fill('123456');

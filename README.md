@@ -33,7 +33,7 @@ To try it on a phone with TalkBack or VoiceOver, run `npm start` on a computer a
 
 | Step | Value |
 | --- | --- |
-| Phone number | 0800 000 0000 |
+| Mobile number | Any Nigerian mobile number, for example 0803 123 4567 (not stored) |
 | Code | 123456 |
 | PIN | Any 4 digits you choose at sign-in |
 | New account, plain | 0198765432 at Lagoon Bank (demo) → Chinedu Eze |
@@ -45,7 +45,7 @@ On the Review screen, the **Demo outcome** choice decides what the demo bank ans
 
 ### 90-second demo script
 
-1. Start the demo and sign in with the values above (J1).
+1. Start the demo and sign in with any mobile number, code 123456 and a 4-digit PIN (J1).
 2. On Home, move by heading to Balance: "Demo balance, 245,800 naira" (J2).
 3. Pay someone → New account → 5009988776, Kola Microfinance. Hear the lookalike warning. Choose **No, change details**.
 4. Enter 0198765432, Lagoon Bank. Hear "Chinedu Eze", try **Spell name**, then **Yes, pay Chinedu Eze** (J3).
@@ -69,8 +69,8 @@ Target: WCAG 2.2 AA. What is in place:
 
 | Check | Result |
 | --- | --- |
-| Unit tests, `npm test` (T-01 to T-07) | 27 of 27 pass |
-| Journeys J1 to J6 in Chromium at 390 px, `checks/journeys.cjs` | 34 of 34 checks pass |
+| Unit tests, `npm test` (T-01 to T-07) | 29 of 29 pass |
+| Journeys J1 to J6 in Chromium at 390 px, `checks/journeys.cjs` | 36 of 36 checks pass |
 | axe-core WCAG 2.0 to 2.2 A/AA rules, every screen, standard and high contrast, `checks/axe.cjs` | 0 violations in 30 scans |
 | TalkBack on a low-cost Android phone (T-08) | **Not yet done** |
 | VoiceOver on iPhone (T-09), NVDA on desktop (T-10) | **Not yet done** |

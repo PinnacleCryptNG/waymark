@@ -6,9 +6,9 @@ import { FEE_KOBO } from '../domain/money.js';
 import { lookupAccount, findLookalike } from '../domain/directory.js';
 import { spellOut } from '../domain/spoken.js';
 import {
-  MESSAGES, validateAmount, validateAccountNumber, normaliseDigits, validatePinFormat, validateNote,
+  MESSAGES, validateAmount, validateAccountNumber, normaliseDigits, validatePinFormat, validateNote, validatePhone,
 } from '../domain/validation.js';
-import { ACCOUNT, TRANSACTIONS, BENEFICIARIES, DIRECTORY, DEMO_PHONE, DEMO_OTP } from '../data/seed.js';
+import { ACCOUNT, TRANSACTIONS, BENEFICIARIES, DIRECTORY, DEMO_OTP } from '../data/seed.js';
 import * as screens from './screens.js';
 import { announce, focusElement } from './dom.js';
 import * as store from './store.js';
@@ -143,9 +143,9 @@ function applyPrefs() {
 const FORMS = {
   phone() {
     state.form.phone = val('phone');
-    const digits = normaliseDigits(state.form.phone);
-    if (!digits) return showErrors([{ field: 'phone', message: MESSAGES.phoneBlank }]);
-    if (digits !== DEMO_PHONE) return showErrors([{ field: 'phone', message: MESSAGES.phoneWrong }]);
+    const checked = validatePhone(state.form.phone);
+    if (!checked.ok) return showErrors([{ field: 'phone', message: checked.message }]);
+    state.form.phoneNumber = checked.number;
     state.form.phoneOk = true;
     go('otp');
   },

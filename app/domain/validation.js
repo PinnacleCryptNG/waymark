@@ -3,8 +3,8 @@
 import { parseAmount, formatNaira, totalDebit } from './money.js';
 
 export const MESSAGES = {
-  phoneBlank: 'Enter the demo phone number. It is printed above the field.',
-  phoneWrong: 'That is not the demo phone number. Enter 0800 000 0000.',
+  phoneBlank: 'Enter your mobile number, for example 0803 123 4567.',
+  phoneFormat: 'Enter an 11-digit Nigerian mobile number starting with 070, 080, 081, 090 or 091, for example 0803 123 4567.',
   otpBlank: 'Enter the 6-digit demo code. It is printed above the field.',
   otpWrong: 'That code does not match. Enter the demo code 123456.',
   pinFormat: 'Your PIN must be exactly 4 digits.',
@@ -53,6 +53,19 @@ export function validateAccountNumber(text) {
 }
 
 export const normaliseDigits = (text) => String(text ?? '').replace(/[\s-]/g, '');
+
+/**
+ * Any Nigerian mobile number: 11 digits starting 070, 071, 080, 081, 090 or 091,
+ * or the same with +234 / 234 in place of the leading 0.
+ * Returns { ok: true, number } in local 0XXXXXXXXXX form, or { ok: false, message }.
+ */
+export function validatePhone(text) {
+  const raw = normaliseDigits(text).replace(/[()]/g, '');
+  if (raw === '') return { ok: false, message: MESSAGES.phoneBlank };
+  const local = raw.replace(/^\+?234(?=[789])/, '0');
+  if (!/^0[789][01]\d{8}$/.test(local)) return { ok: false, message: MESSAGES.phoneFormat };
+  return { ok: true, number: local };
+}
 
 export const validatePinFormat = (pin) => (/^\d{4}$/.test(pin) ? null : MESSAGES.pinFormat);
 

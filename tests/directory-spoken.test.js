@@ -72,3 +72,20 @@ test('dates use Lagos time', () => {
 test('spell out names letter by letter', () => {
   assert.equal(spellOut('Ada Obi'), 'A, D, A, space, O, B, I');
 });
+
+test('phone: any Nigerian mobile number is accepted and normalised', async () => {
+  const { validatePhone } = await import('../app/domain/validation.js');
+  for (const n of ['08031234567', '0803 123 4567', '0803-123-4567', '07012345678', '09012345678', '08101234567', '09112345678']) {
+    assert.equal(validatePhone(n).ok, true, n);
+  }
+  assert.equal(validatePhone('+234 803 123 4567').number, '08031234567');
+  assert.equal(validatePhone('2348031234567').number, '08031234567');
+});
+
+test('phone: blank and invalid numbers are rejected with a message', async () => {
+  const { validatePhone, MESSAGES } = await import('../app/domain/validation.js');
+  assert.equal(validatePhone('').message, MESSAGES.phoneBlank);
+  for (const n of ['0803123456', '080312345678', '06031234567', '08231234567', '12345678901', 'abc', '+44 7700 900123']) {
+    assert.equal(validatePhone(n).message, MESSAGES.phoneFormat, n);
+  }
+});
