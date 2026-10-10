@@ -7,8 +7,7 @@ import {
   spokenAccountEnding, maskAccount, spokenReference, spokenDate, spokenDateTime,
 } from '../domain/spoken.js';
 import { STATUS_LABEL } from '../domain/transfer.js';
-import { activity } from '../domain/ledger.js';
-import { BANKS, BENEFICIARIES, bankName, DEMO_OTP } from '../data/seed.js';
+import { BANKS, bankName, DEMO_OTP } from '../data/seed.js';
 import { hapticsSupported } from './haptics.js';
 
 const h1 = (text) => `<h1 id="page-title" tabindex="-1">${esc(text)}</h1>`;
@@ -107,7 +106,7 @@ export function createPin(state) {
 // ---------- Home, activity, detail ----------
 
 export function home(state) {
-  const recent = activity(state.ledger).slice(0, 3);
+  const recent = state.bankData.activity.slice(0, 3);
   return {
     title: 'Home',
     nav: 'home',
@@ -116,7 +115,7 @@ export function home(state) {
       <section class="balance" aria-labelledby="bal-h">
         <h2 id="bal-h">Balance</h2>
         <p class="balance__label">Demo savings, available</p>
-        <p class="balance__amount"><span class="sr-only">Demo balance, </span>${money(state.ledger.balanceKobo)}</p>
+        <p class="balance__amount"><span class="sr-only">Demo balance, </span>${money(state.bankData.account.balanceKobo)}</p>
       </section>
       <div class="actions">
         <a class="button" href="#pay">Pay someone</a>
@@ -131,7 +130,7 @@ export function home(state) {
 }
 
 export function activityList(state) {
-  const items = activity(state.ledger);
+  const items = state.bankData.activity;
   return {
     title: 'Activity',
     nav: 'activity',
@@ -144,7 +143,7 @@ export function activityList(state) {
 }
 
 export function txDetail(state, id) {
-  const t = state.ledger.transactions.find((x) => x.id === id);
+  const t = state.bankData.activity.find((x) => x.id === id);
   if (!t) {
     return { title: 'Transaction not found', nav: 'activity', html: `${h1('Transaction not found')}<p>This transaction is not in your demo activity. It may have been removed by Reset demo.</p><p><a href="#activity">Back to activity</a></p>` };
   }
@@ -238,7 +237,7 @@ export function paySaved(state) {
         <fieldset class="field${err ? ' field--error' : ''}" ${err ? 'aria-describedby="payee-error"' : ''}>
           <legend>Choose who to pay</legend>
           ${err ? `<p class="field-error" id="payee-error"><span class="sr-only">Error: </span>${esc(err)}</p>` : ''}
-          ${BENEFICIARIES.map((b, i) => `
+          ${state.bankData.beneficiaries.map((b, i) => `
             <div class="radio">
               <input type="radio" name="payee" id="${i === 0 ? 'payee' : `payee-${b.id}`}" value="${b.id}"${selected === b.id ? ' checked' : ''}>
               <label for="${i === 0 ? 'payee' : `payee-${b.id}`}">${payeeLine(b)}</label>
@@ -260,7 +259,7 @@ export function amount(state) {
       ${errorSummary(errs)}
       <p class="muted">${esc(bankName(p.bankCode))}, ${accountEnding(p.accountNumber)}</p>
       <form data-form="amount" novalidate>
-        ${textField({ id: 'amount', label: 'Amount in naira', hint: `Numbers only, for example 5000. Fee ${money(FEE_KOBO)}. Available demo balance ${money(state.ledger.balanceKobo)}.`, error: errorFor(errs, 'amount'), value: state.flow.amountText ?? '', inputmode: 'decimal' })}
+        ${textField({ id: 'amount', label: 'Amount in naira', hint: `Numbers only, for example 5000. Fee ${money(FEE_KOBO)}. Available demo balance ${money(state.bankData.account.balanceKobo)}.`, error: errorFor(errs, 'amount'), value: state.flow.amountText ?? '', inputmode: 'decimal' })}
         ${textField({ id: 'note', label: 'Note for the recipient', hint: 'Up to 30 characters.', error: errorFor(errs, 'note'), value: state.flow.note ?? '', required: false })}
         <button class="button" type="submit">Review transfer</button>
       </form>
@@ -273,7 +272,12 @@ export function review(state) {
   const t = state.flow.transfer;
   const p = t.payee;
   const row = (k, v) => `<div class="kv"><dt>${esc(k)}</dt><dd>${v}</dd></div>`;
-  const outcomes = [['completed', 'Completed'], ['failed', 'Failed'], ['pending', 'Pending'], ['unknown', 'Outcome unknown']];
+  const behaviours = [
+    ['normal', 'Normal: the bank completes it'],
+    ['decline', 'The bank declines it'],
+    ['hold', 'The bank holds it as pending'],
+    ['drop', 'The connection drops after sending'],
+  ];
   return {
     title: 'Review transfer',
     nav: 'pay',
@@ -295,9 +299,9 @@ export function review(state) {
       </div>
       <form data-form="confirm" novalidate>
         <fieldset class="demo-switch">
-          <legend>Demo outcome</legend>
-          <p class="hint">For judges and testers: choose what the demo bank will answer. A real app has no such choice.</p>
-          ${outcomes.map(([v, label]) => `<div class="radio"><input type="radio" name="outcome" id="outcome-${v}" value="${v}"${state.flow.outcome === v ? ' checked' : ''}><label for="outcome-${v}">${label}</label></div>`).join('')}
+          <legend>Demo bank behaviour</legend>
+          <p class="hint">For judges and testers: choose how the demo bank and network behave for this transfer. A real app has no such choice.</p>
+          ${behaviours.map(([v, label]) => `<div class="radio"><input type="radio" name="behaviour" id="behaviour-${v}" value="${v}"${state.flow.behaviour === v ? ' checked' : ''}><label for="behaviour-${v}">${label}</label></div>`).join('')}
         </fieldset>
         <p class="warning" id="pin-privacy">People near you may hear your screen reader. Use headphones if you can. WAYMARK never reads your PIN digits aloud.</p>
         ${textField({ id: 'pin', label: 'Demo PIN', hint: 'The 4 digits you created at sign-in.', error: errorFor(errs, 'pin'), type: 'password', inputmode: 'numeric', autocomplete: 'off', extra: 'maxlength="4" data-pin-count' })}
@@ -315,12 +319,16 @@ const OUTCOME_COPY = {
 };
 
 export function outcome(state, operationId) {
-  const t = state.ledger.transfers[operationId];
-  if (!t) return { title: 'Transfer not found', nav: 'pay', html: `${h1('Transfer not found')}<p>We could not find this transfer. It may have been cleared by Reset demo.</p><p><a href="#home">Go to Home</a></p>` };
+  const t = state.attempts[operationId];
+  if (t === undefined) return { title: 'Checking transfer', nav: 'pay', html: `${h1('Checking transfer')}<p role="status">Asking the bank for the latest status…</p>` };
+  if (!t) return { title: 'Transfer not found', nav: 'pay', html: `${h1('Transfer not found')}<p>The bank has no record of this transfer. It may have been cleared by Reset demo.</p><p><a href="#home">Go to Home</a></p>` };
   const copy = OUTCOME_COPY[t.state];
   const row = (k, v) => `<div class="kv"><dt>${esc(k)}</dt><dd>${v}</dd></div>`;
   const unresolved = t.state === 'pending' || t.state === 'unknown';
-  const failureNote = t.failureReason === 'insufficient-funds' ? ' The amount plus fee was more than your demo balance.' : '';
+  const failureNote = {
+    'insufficient-funds': ' The amount plus fee was more than your demo balance.',
+    'not-received': ' The bank has no record of it, so the request never arrived.',
+  }[t.failureReason] ?? '';
   let actions;
   if (unresolved) {
     actions = `<button type="button" class="button" data-action="check-status" ${state.ui.checking ? 'disabled' : ''}>${state.ui.checking ? 'Checking status…' : 'Check status'}</button>
@@ -340,14 +348,15 @@ export function outcome(state, operationId) {
         ${h1(copy.h)}
         <p class="lede">${esc(copy.p(t) + failureNote)}</p>
       </div>
+      ${state.ui.flash ? `<p class="warning" role="status">${esc(state.ui.flash)}</p>` : ''}
       <dl class="summary">
         ${row('Status', statusTag(t.state))}
         ${row('To', esc(t.payee.name))}
         ${row('Account', `${esc(bankName(t.payee.bankCode))}, ${accountEnding(t.payee.accountNumber)}`)}
         ${row('Amount', money(t.amountKobo))}
         ${row('Total debit', money(t.totalKobo))}
-        ${row('Reference', dual(t.reference, spokenReference(t.reference)))}
-        ${row('Demo balance now', money(state.ledger.balanceKobo))}
+        ${row('Reference', t.reference ? dual(t.reference, spokenReference(t.reference)) : 'Not known yet')}
+        ${state.bankData.account ? row('Demo balance now', money(state.bankData.account.balanceKobo)) : ''}
       </dl>
       <div class="actions">${actions}</div>`,
   };

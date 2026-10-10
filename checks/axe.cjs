@@ -6,7 +6,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:8080/';
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  const at = (t) => page.waitForFunction((x) => document.querySelector('h1')?.textContent.startsWith(x), t, { timeout: 4000 });
+  const at = (t) => page.waitForFunction((x) => document.querySelector('h1')?.textContent.startsWith(x), t, { timeout: 12000 });
   const findings = [];
   async function scan(label) {
     await page.addScriptTag({ content: AXE });
@@ -54,7 +54,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:8080/';
     await page.getByLabel('Amount in naira').fill('100');
     await page.getByRole('button', { name: 'Review transfer' }).click(); await at('Review transfer');
     await scan(`${mode}/review`);
-    await page.getByLabel('Outcome unknown').check();
+    await page.getByLabel('The connection drops after sending').check();
     await page.getByLabel('Demo PIN').fill('2580');
     await page.getByRole('button', { name: 'Confirm transfer' }).click(); await at('We could not');
     await scan(`${mode}/outcome-unknown`);

@@ -1,28 +1,34 @@
-// sessionStorage mirror of the demo ledger and preferences. Synthetic data only.
-// PIN and OTP are never stored. Every access is guarded: storage may be unavailable.
+// sessionStorage, guarded: storage may be unavailable (private windows, sandboxes).
+// Two separate records: the user's settings (client side) and the demo bank's ledger (bank side).
+// PIN, code and phone number are never stored.
 
-const KEY = 'waymark.demo.v1';
+const PREFS_KEY = 'waymark.prefs.v1';
+const BANK_KEY = 'waymark.demobank.v1';
 
 export const DEFAULT_PREFS = { textSize: 'standard', highContrast: false, reducedMotion: false, haptics: true };
 
-export function load() {
+function read(key) {
   try {
-    const raw = sessionStorage.getItem(KEY);
+    const raw = sessionStorage.getItem(key);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-export function save({ ledger, prefs }) {
+function write(key, value) {
   try {
-    sessionStorage.setItem(KEY, JSON.stringify({ ledger, prefs }));
-    return true;
-  } catch {
-    return false;
-  }
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch { /* storage unavailable: the demo still works for this page load */ }
 }
 
-export function clear() {
-  try { sessionStorage.removeItem(KEY); } catch { /* storage unavailable: nothing to clear */ }
-}
+export const prefsStore = {
+  load: () => ({ ...DEFAULT_PREFS, ...read(PREFS_KEY) }),
+  save: (prefs) => write(PREFS_KEY, prefs),
+};
+
+/** Passed to the demo bank so its ledger survives a page refresh. */
+export const bankStorage = {
+  load: () => read(BANK_KEY),
+  save: (ledger) => write(BANK_KEY, ledger),
+};

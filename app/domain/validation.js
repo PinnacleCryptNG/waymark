@@ -21,6 +21,7 @@ export const MESSAGES = {
   amountZero: 'Enter an amount greater than zero.',
   amountNegative: 'Enter an amount greater than zero. Do not use a minus sign.',
   noteTooLong: 'Keep the note to 30 characters or fewer.',
+  network: 'We could not reach the bank. Check your connection and try again.',
 };
 
 export const amountOverBalance = (balanceKobo, feeKobo) =>

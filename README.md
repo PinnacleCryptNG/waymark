@@ -41,7 +41,16 @@ To try it on a phone with TalkBack or VoiceOver, run `npm start` on a computer a
 
 All values are also printed on screen where they are needed.
 
-On the Review screen, the **Demo outcome** choice decides what the demo bank answers (Completed, Failed, Pending or Outcome unknown), so every path can be shown. A real app would not have this choice.
+On the Review screen, **Demo bank behaviour** decides how the demo bank and network behave for that one transfer, so every path can be shown:
+
+| Choice | What happens | Result |
+| --- | --- | --- |
+| Normal | The bank completes it | Transfer completed |
+| The bank declines it | No money moves | Transfer failed |
+| The bank holds it as pending | The bank accepts it but has not finished | Transfer pending; Check status completes it |
+| The connection drops after sending | The bank completes it, but its reply never arrives; the app gives up after 6 seconds | Outcome unknown; Check status finds it completed |
+
+A real app would not have this choice.
 
 ### 90-second demo script
 
@@ -51,7 +60,7 @@ On the Review screen, the **Demo outcome** choice decides what the demo bank ans
 4. Enter 0198765432, Lagoon Bank. Hear "Chinedu Eze", try **Spell name**, then **Yes, pay Chinedu Eze** (J3).
 5. Enter 245800 to show the over-balance error with the amount kept, then correct it to 5000 (J5).
 6. Review, enter the PIN, **Confirm transfer**. The result is announced and activity updates once (J4).
-7. Pay again with **Demo outcome: Outcome unknown**. The only action is **Check status**, which resolves the transfer to Completed (J6).
+7. Pay again with **The connection drops after sending**. After 6 seconds with no reply the app says it could not confirm the transfer. The only action is **Check status**, which finds the bank had completed it (J6).
 
 ## Accessibility
 
@@ -69,8 +78,8 @@ Target: WCAG 2.2 AA. What is in place:
 
 | Check | Result |
 | --- | --- |
-| Unit tests, `npm test` (T-01 to T-07) | 29 of 29 pass |
-| Journeys J1 to J6 in Chromium at 390 px, `checks/journeys.cjs` | 36 of 36 checks pass |
+| Unit tests, `npm test` (T-01 to T-07, plus the bank boundary) | 42 of 42 pass |
+| Journeys J1 to J6 in Chromium at 390 px, `checks/journeys.cjs` | 40 of 40 checks pass |
 | axe-core WCAG 2.0 to 2.2 A/AA rules, every screen, standard and high contrast, `checks/axe.cjs` | 0 violations in 30 scans |
 | TalkBack on a low-cost Android phone (T-08) | **Not yet done** |
 | VoiceOver on iPhone (T-09), NVDA on desktop (T-10) | **Not yet done** |
@@ -88,11 +97,32 @@ node checks/journeys.cjs
 node checks/axe.cjs
 ```
 
+## Architecture
+
+```
+screens (app/ui)  ──>  bank boundary (app/bank/bank-api.js)  ──>  DemoBank (app/bank/demo-bank.js)
+      │                         ▲                                        │
+      └── transfer client ──────┘                                        └── ledger, name directory (app/domain)
+          (app/bank/transfer-client.js: 6-second timeout, status checks, never resends)
+```
+
+- **Screens** never touch money directly. They call the bank boundary and render from a cached copy of the account and activity.
+- **The bank boundary** lists everything the app asks of a bank: account, activity, beneficiaries, name lookup, fee quote, submit transfer (with an idempotency key so a repeat never moves money twice) and transfer status.
+- **DemoBank** implements that boundary in the browser with realistic delays and four behaviours (normal, decline, hold, drop).
+- **The transfer client** sends a transfer and waits up to 6 seconds. No reply, or a network error, means *Outcome unknown*, never *Failed*. The only way forward is a status check with the same transfer id.
+
+Going live means writing a second adapter with the same methods that calls the bank's authorised APIs (for example NIP name enquiry and payment initiation behind a server the bank approves). The screens and the transfer client do not change.
+
+## Hosting
+
+`.github/workflows/pages.yml` runs the tests and publishes `app/` to GitHub Pages on every push to the default branch. One-time setup in the repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**. The demo is then at `https://pinnaclecryptng.github.io/waymark/`.
+
 ## Project layout
 
 ```
 app/
   index.html, styles.css, sw.js, manifest.webmanifest
+  bank/     bank boundary, DemoBank, transfer client (timeouts and status checks)
   domain/   money, spoken forms, validation, transfer state machine, ledger, name lookup (pure, no DOM)
   ui/       routing, screens, focus and announcements, haptics, sessionStorage
   data/     fictional seed data
@@ -105,7 +135,7 @@ docs/       PRD and review (Word)
 ## How it behaves
 
 - Money is integer kobo throughout. The fee is a flat ₦10.00 demo fee.
-- One ledger module owns the balance and activity. Submitting the same operation twice changes nothing; a double tap on Confirm creates one transfer.
+- One ledger module, inside DemoBank, owns the balance and activity. Submitting the same transfer id twice changes nothing; a double tap on Confirm creates one transfer.
 - The ledger and settings are kept in `sessionStorage` for the browser tab. The demo PIN is held in memory only, so refreshing the page asks you to sign in again. **Settings → Reset demo** restores the starting data.
 - After the first visit, the app works offline (service worker).
 - iPhone browsers cannot vibrate, so iOS users get the spoken outcome only.

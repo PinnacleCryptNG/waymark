@@ -16,7 +16,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
     const a = document.activeElement; return `${a.tagName}#${a.id} "${(a.textContent || '').trim().slice(0, 60)}"`;
   });
   const h1 = () => page.locator('h1').innerText();
-  const at = (t) => page.waitForFunction((x) => document.querySelector('h1')?.textContent === x, t, { timeout: 4000 }).then(() => true, () => false);
+  const at = (t) => page.waitForFunction((x) => document.querySelector('h1')?.textContent === x, t, { timeout: 10000 }).then(() => true, () => false);
   const live = () => page.locator('#live').innerText();
 
   // J1 sign in
@@ -98,7 +98,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   const btn = page.getByRole('button', { name: 'Confirm transfer' });
   await btn.click();
   await page.evaluate(() => { const b = document.getElementById('confirm-btn'); b.click(); b.click(); document.querySelector('form[data-form="confirm"]').requestSubmit(); });
-  await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Transfer completed', null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Transfer completed', null, { timeout: 12000 });
   check('outcome focus on h1', (await focused()).startsWith('H1#page-title'), await focused());
   const bal = await page.locator('.summary').textContent();
   check('balance debited once', bal.includes('240,790 naira'), '');
@@ -119,15 +119,15 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Amount in naira').fill('1,000');
   await page.getByRole('button', { name: 'Review transfer' }).click();
-  await page.getByLabel('Outcome unknown').check();
+  await page.getByLabel('The connection drops after sending').check();
   await page.getByLabel('Demo PIN').fill('2580');
   await page.getByRole('button', { name: 'Confirm transfer' }).click();
-  await page.waitForFunction(() => document.querySelector('h1')?.textContent.startsWith('We could not confirm'), null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('h1')?.textContent.startsWith('We could not confirm'), null, { timeout: 12000 });
   const unknownBtns = await page.locator('main button, main a.button').allInnerTexts();
   check('unknown: no resend control', !unknownBtns.some((t) => /send|try again|confirm/i.test(t)), unknownBtns.join(' | '));
   await page.screenshot({ path: OUT + '08-unknown.png', fullPage: true });
   await page.getByRole('button', { name: 'Check status' }).click();
-  await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Transfer completed', null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Transfer completed', null, { timeout: 12000 });
   check('unknown resolved to completed', true);
   await page.getByRole('link', { name: 'Activity', exact: true }).click();
   await at('Activity');
@@ -140,9 +140,24 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Amount in naira').fill('200');
   await page.getByRole('button', { name: 'Review transfer' }).click();
+  await at('Review transfer');
   await page.getByRole('button', { name: 'Cancel transfer' }).click();
   await at('Transfer cancelled');
   check('cancelled says nothing sent', (await page.locator('main').innerText()).includes('Nothing was sent'));
+
+  // Cancelling while the fee quote is loading must not jump to Review afterwards
+  await page.getByRole('link', { name: 'Pay', exact: true }).click();
+  await page.getByRole('link', { name: /Saved beneficiary/ }).click();
+  await page.getByLabel(/Funke Adeyemi/).check();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await at('How much');
+  await page.getByLabel('Amount in naira').fill('200');
+  await page.evaluate(() => {
+    document.querySelector('form[data-form="amount"]').requestSubmit();
+    document.querySelector('[data-action="cancel-transfer"]').click();
+  });
+  await page.waitForTimeout(800);
+  check('late quote ignored after cancel', (await h1()) === 'Transfer cancelled', await h1());
 
   // Failed + retry keeps details
   await page.getByRole('link', { name: 'Pay', exact: true }).click();
@@ -151,12 +166,29 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Amount in naira').fill('300');
   await page.getByRole('button', { name: 'Review transfer' }).click();
-  await page.getByLabel('Failed').check();
+  await page.getByLabel('The bank declines it').check();
   await page.getByLabel('Demo PIN').fill('2580');
   await page.getByRole('button', { name: 'Confirm transfer' }).click();
-  await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Transfer failed', null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Transfer failed', null, { timeout: 12000 });
   await page.getByRole('button', { name: 'Try again' }).click();
   check('retry returns to review with same amount', (await at('Review transfer')) && (await page.locator('.summary').textContent()).includes('300 naira'));
+
+  // Pending: bank holds it, status check completes it
+  await page.getByRole('link', { name: 'Pay', exact: true }).click();
+  await page.getByRole('link', { name: /Saved beneficiary/ }).click();
+  await page.getByLabel(/Adaeze Okafor/).check();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('Amount in naira').fill('750');
+  await page.getByRole('button', { name: 'Review transfer' }).click();
+  await at('Review transfer');
+  await page.getByLabel('The bank holds it as pending').check();
+  await page.getByLabel('Demo PIN').fill('2580');
+  await page.getByRole('button', { name: 'Confirm transfer' }).click();
+  check('hold shows pending', await at('Transfer pending'));
+  const pendingBtns = await page.locator('main button, main a.button').allInnerTexts();
+  check('pending: no resend control', !pendingBtns.some((t) => /send|try again|confirm/i.test(t)), pendingBtns.join(' | '));
+  await page.getByRole('button', { name: 'Check status' }).click();
+  check('pending resolves to completed', await at('Transfer completed'));
 
   // Settings
   await page.getByRole('link', { name: 'Settings', exact: true }).click();

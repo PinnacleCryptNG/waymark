@@ -1,10 +1,11 @@
 // Offline support: cache the static files, serve from cache, refresh the cache in the background.
-const CACHE = 'waymark-v1';
+const CACHE = 'waymark-v2';
 const FILES = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './ui/app.js', './ui/screens.js', './ui/dom.js', './ui/store.js', './ui/haptics.js',
   './domain/money.js', './domain/spoken.js', './domain/transfer.js', './domain/ledger.js',
   './domain/directory.js', './domain/validation.js', './data/seed.js',
+  './bank/bank-api.js', './bank/demo-bank.js', './bank/transfer-client.js',
 ];
 
 self.addEventListener('install', (e) => {

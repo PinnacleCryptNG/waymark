@@ -1,39 +1,47 @@
 // App shell: state, hash routing, focus management and event handling.
+// All banking goes through `bank` (see bank/bank-api.js). Screens render from a local
+// cache (state.bankData) that is refreshed from the bank after anything changes.
 
-import { createLedger, submitTransfer, checkStatus } from '../domain/ledger.js';
+import { createDemoBank, BEHAVIOURS } from '../bank/demo-bank.js';
+import { assertBank } from '../bank/bank-api.js';
+import { sendTransfer, checkTransfer, attemptFromStatus } from '../bank/transfer-client.js';
 import { STATES, createTransfer, transition } from '../domain/transfer.js';
-import { FEE_KOBO } from '../domain/money.js';
-import { lookupAccount, findLookalike } from '../domain/directory.js';
+import { findLookalike } from '../domain/directory.js';
 import { spellOut } from '../domain/spoken.js';
 import {
-  MESSAGES, validateAmount, validateAccountNumber, normaliseDigits, validatePinFormat, validateNote, validatePhone,
+  MESSAGES, validateAmount, validateAccountNumber, normaliseDigits, validatePinFormat, validateNote,
+  validatePhone, amountOverBalance,
 } from '../domain/validation.js';
-import { ACCOUNT, TRANSACTIONS, BENEFICIARIES, DIRECTORY, DEMO_OTP } from '../data/seed.js';
+import { FEE_KOBO } from '../domain/money.js';
+import { DEMO_OTP } from '../data/seed.js';
 import * as screens from './screens.js';
 import { announce, focusElement } from './dom.js';
-import * as store from './store.js';
+import { prefsStore, bankStorage, DEFAULT_PREFS } from './store.js';
 import { playOutcome } from './haptics.js';
 
-const PROCESSING_MS = 1200;
-const LOOKUP_MS = 700;
-const STATUS_CHECK_MS = 900;
+const bank = assertBank(createDemoBank({ storage: bankStorage }));
 
 const freshLookup = () => ({ accountText: '', bankCode: '', result: null, lookalike: null, loading: false, spelled: '' });
-const freshFlow = () => ({ payee: null, amountText: '', note: '', transfer: null, outcome: 'completed' });
+const freshFlow = () => ({ payee: null, amountText: '', note: '', transfer: null, behaviour: BEHAVIOURS.NORMAL });
 
-const saved = store.load();
 const state = {
   signedIn: false,
   pin: null, // memory only, never stored
-  ledger: saved?.ledger ?? createLedger({ account: ACCOUNT, transactions: TRANSACTIONS }),
-  prefs: { ...store.DEFAULT_PREFS, ...saved?.prefs },
+  prefs: prefsStore.load(),
   form: {},
   lookup: freshLookup(),
   flow: freshFlow(),
-  ui: { errors: null, focus: null, submitting: false, checking: false, flash: '', confirmReset: false },
+  attempts: {}, // transfer attempts as this device knows them, by transfer id
+  bankData: { account: null, activity: [], beneficiaries: [] },
+  ui: { errors: null, focus: null, submitting: false, checking: false, flash: '', confirmReset: false, loadingAttempt: false },
 };
 
-const persist = () => store.save({ ledger: state.ledger, prefs: state.prefs });
+async function refreshBankData() {
+  const [account, activity, beneficiaries] = await Promise.all([
+    bank.getAccount(), bank.listActivity(), bank.listBeneficiaries(),
+  ]);
+  state.bankData = { account, activity, beneficiaries };
+}
 
 // ---------- Routing ----------
 
@@ -82,6 +90,11 @@ function render() {
   const redirect = guard(route);
   if (redirect) { location.replace(`#${redirect}`); return; }
 
+  // Opening a transfer this device has not seen (from Activity, or after a refresh): ask the bank.
+  if (route.name === 'outcome' && !state.attempts[route.param] && !state.ui.loadingAttempt) {
+    loadAttempt(route.param);
+  }
+
   const screen = SCREENS[route.name](state, route.param);
   const main = document.getElementById('main');
   main.innerHTML = screen.html;
@@ -99,6 +112,20 @@ function render() {
 function rerender(focus) {
   state.ui.focus = focus ?? null;
   render();
+}
+
+async function loadAttempt(id) {
+  state.ui.loadingAttempt = true;
+  try {
+    const status = await bank.getTransferStatus(id);
+    if (status.ok) state.attempts[id] = attemptFromStatus(status);
+    else state.attempts[id] = null; // known not to exist
+    await refreshBankData();
+  } catch {
+    state.ui.flash = MESSAGES.network;
+  }
+  state.ui.loadingAttempt = false;
+  if (parseRoute().param === id) rerender();
 }
 
 function updateNav(current) {
@@ -122,13 +149,41 @@ const val = (id) => document.getElementById(id)?.value ?? '';
 const showErrors = (errors) => { state.ui.errors = errors; rerender('errors'); };
 const resetFlow = () => { state.flow = freshFlow(); state.lookup = freshLookup(); };
 
-function startReview() {
+function setBusy(button, text) {
+  if (!button) return;
+  button.disabled = true;
+  button.setAttribute('aria-disabled', 'true');
+  button.textContent = text;
+}
+
+function restore(button, text) {
+  if (!button) return;
+  button.disabled = false;
+  button.removeAttribute('aria-disabled');
+  button.textContent = text;
+}
+
+/** Ask the bank for a fee quote and move to Review. Returns an error message, or null. */
+async function startReview() {
   const { flow } = state;
-  const checked = validateAmount(flow.amountText, state.ledger.balanceKobo, FEE_KOBO);
-  if (!checked.ok) { go('amount'); return; }
-  const draft = createTransfer({ payee: flow.payee, amountKobo: checked.kobo, feeKobo: FEE_KOBO, note: flow.note.trim() });
+  const startedOn = location.hash;
+  const checked = validateAmount(flow.amountText, state.bankData.account.balanceKobo, FEE_KOBO);
+  if (!checked.ok) return checked.message;
+  let quote;
+  try {
+    quote = await bank.quoteTransfer({ amountKobo: checked.kobo });
+  } catch {
+    return MESSAGES.network;
+  }
+  // The user may have cancelled or moved on while the bank was answering: drop the reply.
+  if (state.flow !== flow || location.hash !== startedOn) return null;
+  if (!quote.ok) {
+    return quote.code === 'insufficient-funds' ? amountOverBalance(quote.balanceKobo, quote.feeKobo) : MESSAGES.amountNotNumber;
+  }
+  const draft = createTransfer({ payee: flow.payee, amountKobo: quote.amountKobo, feeKobo: quote.feeKobo, note: flow.note.trim() });
   flow.transfer = transition(draft, STATES.REVIEW);
   go('review');
+  return null;
 }
 
 function applyPrefs() {
@@ -159,13 +214,21 @@ const FORMS = {
     go('create-pin');
   },
 
-  'create-pin'() {
+  async 'create-pin'(form) {
     const pin1 = val('pin1'), pin2 = val('pin2');
     const errors = [];
     const formatError = validatePinFormat(pin1);
     if (formatError) errors.push({ field: 'pin1', message: formatError });
     else if (pin1 !== pin2) errors.push({ field: 'pin2', message: MESSAGES.pinMismatch });
     if (errors.length) return showErrors(errors);
+    const button = form.querySelector('button[type="submit"]');
+    setBusy(button, 'Signing in…');
+    try {
+      await refreshBankData();
+    } catch {
+      restore(button, 'Create PIN and sign in');
+      return showErrors([{ field: 'pin1', message: MESSAGES.network }]);
+    }
     state.pin = pin1;
     state.signedIn = true;
     state.form = {};
@@ -173,7 +236,7 @@ const FORMS = {
     go('home');
   },
 
-  lookup() {
+  async lookup(form) {
     const L = state.lookup;
     L.accountText = val('account');
     L.bankCode = val('bank');
@@ -188,68 +251,79 @@ const FORMS = {
     L.lookalike = null;
     L.spelled = '';
     document.getElementById('lookup-result')?.remove();
-    const btn = document.querySelector('[data-form="lookup"] button[type="submit"]');
-    btn.disabled = true;
-    btn.textContent = 'Looking up account…';
+    setBusy(form.querySelector('button[type="submit"]'), 'Looking up account…');
     announce('Looking up account.');
 
-    setTimeout(() => {
-      L.loading = false;
-      const found = lookupAccount(DIRECTORY, L.bankCode, normaliseDigits(L.accountText));
-      if (!found.ok) return showErrors([{ field: 'account', message: MESSAGES.notFound }]);
-      L.result = found.entry;
-      L.lookalike = findLookalike(BENEFICIARIES, found.entry);
-      state.ui.errors = null;
-      rerender('#lookup-result');
-    }, LOOKUP_MS);
+    let found;
+    try {
+      found = await bank.lookupName({ bankCode: L.bankCode, accountNumber: normaliseDigits(L.accountText) });
+    } catch {
+      found = null;
+    }
+    L.loading = false;
+    if (state.lookup !== L || parseRoute().name !== 'pay-new') return; // user moved on
+    if (!found) return showErrors([{ field: 'account', message: MESSAGES.network }]);
+    if (!found.ok) return showErrors([{ field: 'account', message: MESSAGES.notFound }]);
+    L.result = { name: found.name, bankCode: found.bankCode, accountNumber: found.accountNumber };
+    L.lookalike = findLookalike(state.bankData.beneficiaries, L.result);
+    state.ui.errors = null;
+    rerender('#lookup-result');
   },
 
   saved() {
     const id = document.querySelector('input[name="payee"]:checked')?.value;
     if (!id) return showErrors([{ field: 'payee', message: MESSAGES.payeeBlank }]);
-    state.flow.payee = { ...BENEFICIARIES.find((b) => b.id === id) };
+    state.flow.payee = { ...state.bankData.beneficiaries.find((b) => b.id === id) };
     go('amount');
   },
 
-  amount() {
+  async amount(form) {
     const { flow } = state;
     flow.amountText = val('amount');
     flow.note = val('note');
     const errors = [];
-    const checked = validateAmount(flow.amountText, state.ledger.balanceKobo, FEE_KOBO);
+    const checked = validateAmount(flow.amountText, state.bankData.account.balanceKobo, FEE_KOBO);
     if (!checked.ok) errors.push({ field: 'amount', message: checked.message });
     const noteError = validateNote(flow.note);
     if (noteError) errors.push({ field: 'note', message: noteError });
     if (errors.length) return showErrors(errors);
-    startReview();
+    const button = form.querySelector('button[type="submit"]');
+    setBusy(button, 'Getting the fee…');
+    const error = await startReview();
+    if (error) {
+      restore(button, 'Review transfer');
+      showErrors([{ field: 'amount', message: error }]);
+    }
   },
 
-  confirm() {
-    if (state.ui.submitting) return; // second tap while processing does nothing
+  async confirm() {
+    if (state.ui.submitting) return; // a second tap while processing does nothing
     const { flow } = state;
-    flow.outcome = document.querySelector('input[name="outcome"]:checked')?.value ?? 'completed';
+    flow.behaviour = document.querySelector('input[name="behaviour"]:checked')?.value ?? BEHAVIOURS.NORMAL;
     if (val('pin') !== state.pin) return showErrors([{ field: 'pin', message: MESSAGES.pinWrong }]);
 
     state.ui.submitting = true;
-    const btn = document.getElementById('confirm-btn');
-    btn.disabled = true;
-    btn.setAttribute('aria-disabled', 'true');
-    btn.textContent = 'Processing…';
-    announce('Processing your transfer. Please wait.');
+    setBusy(document.getElementById('confirm-btn'), 'Processing…');
+    announce('Sending your transfer to the bank. Please wait.');
 
+    bank.setBehaviour(flow.behaviour);
     const processing = transition(flow.transfer, STATES.PROCESSING);
     flow.transfer = processing;
-    setTimeout(() => {
-      const result = submitTransfer(state.ledger, processing, flow.outcome);
-      state.ledger = result.ledger;
-      persist();
-      state.ui.submitting = false;
-      // Keep the details after a failure so Try again does not mean retyping.
-      if (result.transfer.state === STATES.FAILED) flow.transfer = null;
-      else resetFlow();
-      go(`outcome/${encodeURIComponent(result.transfer.operationId)}`);
-      playOutcome(result.transfer.state, state.prefs.haptics);
-    }, PROCESSING_MS);
+    state.attempts[processing.operationId] = processing;
+
+    const result = await sendTransfer(bank, processing, {
+      onSlow: () => announce('Still waiting for the bank. Do not close this page or pay again.'),
+    });
+    bank.setBehaviour(BEHAVIOURS.NORMAL); // the demo switch applies to this one transfer only
+    state.attempts[result.operationId] = result;
+    try { await refreshBankData(); } catch { /* keep the last known balance */ }
+    state.ui.submitting = false;
+
+    // Keep the details after a failure so Try again does not mean retyping.
+    if (result.state === STATES.FAILED) flow.transfer = null;
+    else resetFlow();
+    go(`outcome/${encodeURIComponent(result.operationId)}`);
+    playOutcome(result.state, state.prefs.haptics);
   },
 };
 
@@ -263,7 +337,7 @@ const ACTIONS = {
 
   'confirm-payee'() {
     const { result } = state.lookup;
-    state.flow.payee = { id: null, name: result.name, bankCode: result.bankCode, accountNumber: result.accountNumber };
+    state.flow.payee = { id: null, ...result };
     state.lookup = freshLookup();
     go('amount');
   },
@@ -304,46 +378,49 @@ const ACTIONS = {
   'cancel-transfer'() {
     if (state.ui.submitting) return;
     const t = state.flow.transfer;
-    if (t) transition(t, STATES.CANCELLED); // throws if it was already submitted
+    if (t) transition(t, STATES.CANCELLED); // throws if it was already sent
     resetFlow();
     go('cancelled');
   },
 
-  'check-status'(el) {
+  async 'check-status'(el) {
     if (state.ui.checking) return;
     const id = parseRoute().param;
+    const attempt = state.attempts[id];
+    if (!attempt) return;
     state.ui.checking = true;
-    el.disabled = true;
-    el.textContent = 'Checking status…';
-    announce('Checking status.');
-    setTimeout(() => {
-      const result = checkStatus(state.ledger, id);
-      state.ledger = result.ledger;
-      persist();
-      state.ui.checking = false;
-      rerender();
-      playOutcome(result.transfer.state, state.prefs.haptics);
-    }, STATUS_CHECK_MS);
+    setBusy(el, 'Checking status…');
+    announce('Checking status with the bank.');
+    const updated = await checkTransfer(bank, attempt);
+    state.attempts[id] = updated;
+    try { await refreshBankData(); } catch { /* keep the last known balance */ }
+    state.ui.checking = false;
+    if (updated === attempt) state.ui.flash = MESSAGES.network;
+    rerender();
+    if (updated !== attempt) playOutcome(updated.state, state.prefs.haptics);
   },
 
-  retry() {
+  async retry(el) {
     if (!state.flow.payee) { go('pay'); return; }
-    startReview();
+    setBusy(el, 'Getting the fee…');
+    const error = await startReview();
+    if (error) go('amount'); // amount screen keeps the entered values for correction
   },
 
   'reset-ask'() { state.ui.confirmReset = true; rerender('#reset-confirm'); },
   'reset-no'() { state.ui.confirmReset = false; rerender(); },
   'reset-yes'() {
-    store.clear();
-    state.ledger = createLedger({ account: ACCOUNT, transactions: TRANSACTIONS });
-    state.prefs = { ...store.DEFAULT_PREFS };
+    bank.reset();
+    state.prefs = { ...DEFAULT_PREFS };
+    prefsStore.save(state.prefs);
     state.signedIn = false;
     state.pin = null;
     state.form = {};
+    state.attempts = {};
+    state.bankData = { account: null, activity: [], beneficiaries: [] };
     state.ui.confirmReset = false;
     resetFlow();
     applyPrefs();
-    persist();
     go('welcome');
   },
 };
@@ -356,7 +433,7 @@ main.addEventListener('submit', (e) => {
   const form = e.target.closest('form[data-form]');
   if (!form) return;
   e.preventDefault();
-  FORMS[form.dataset.form]?.();
+  FORMS[form.dataset.form]?.(form);
 });
 
 main.addEventListener('click', (e) => {
@@ -394,7 +471,7 @@ main.addEventListener('change', (e) => {
     message = `${t.nextElementSibling.textContent} ${t.checked ? 'on' : 'off'}.`;
   }
   applyPrefs();
-  persist();
+  prefsStore.save(p);
   announce(`${message} Saved for this session.`);
 });
 

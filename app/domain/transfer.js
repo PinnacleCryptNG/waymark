@@ -17,7 +17,7 @@ const ALLOWED = {
   [S.REVIEW]: [S.DRAFT, S.PROCESSING, S.CANCELLED],
   [S.PROCESSING]: [S.COMPLETED, S.FAILED, S.PENDING, S.UNKNOWN],
   [S.PENDING]: [S.COMPLETED, S.FAILED],
-  [S.UNKNOWN]: [S.COMPLETED, S.FAILED],
+  [S.UNKNOWN]: [S.COMPLETED, S.FAILED, S.PENDING], // a status check may find the bank still working on it
   [S.COMPLETED]: [],
   [S.FAILED]: [],
   [S.CANCELLED]: [],
