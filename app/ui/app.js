@@ -19,13 +19,16 @@ import { announce, focusElement } from './dom.js';
 import { prefsStore, bankStorage, credentialStore, DEFAULT_PREFS } from './store.js';
 import { biometricAvailable, registerBiometric, verifyBiometric } from './biometric.js';
 import { createRuleInterpreter } from '../voice/interpreter.js';
+import { createGeminiInterpreter } from '../voice/gemini-interpreter.js';
+import { AI_ENDPOINT } from '../config.js';
 import { createAssistant } from '../voice/assistant.js';
 import { speak, stopSpeaking, startListening, tone } from '../voice/speech.js';
 import { createTalkDriver } from './talk.js';
 import { playOutcome } from './haptics.js';
 
 const bank = assertBank(createDemoBank({ storage: bankStorage }));
-const interpreter = createRuleInterpreter(); // the slot a Claude-backed reader will fill
+// Gemini reads what was said when its server is set up (config.js); otherwise the built-in rules do.
+const interpreter = AI_ENDPOINT ? createGeminiInterpreter({ endpoint: AI_ENDPOINT }) : createRuleInterpreter();
 
 const freshLookup = () => ({ accountText: '', bankCode: '', result: null, lookalike: null, loading: false, spelled: '' });
 const freshFlow = () => ({ payee: null, amountText: '', note: '', transfer: null, behaviour: BEHAVIOURS.NORMAL });

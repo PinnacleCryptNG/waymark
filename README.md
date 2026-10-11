@@ -80,8 +80,8 @@ Target: WCAG 2.2 AA. What is in place:
 
 | Check | Result |
 | --- | --- |
-| Unit tests, `npm test` (T-01 to T-07, the bank boundary, the voice reader and dialog, and the voice assistant) | 67 of 67 pass |
-| Journeys J1 to J6 in Chromium at 390 px, plus fingerprint sign-in and approval with a virtual authenticator, `checks/journeys.cjs` | 70 of 70 checks pass (including a voice-first journey from first launch: sign-up, fingerprint, payment, with stand-in microphone and voice) |
+| Unit tests, `npm test` (T-01 to T-07, the bank boundary, the voice reader and dialog, the voice assistant, and the Gemini reader and server) | 75 of 75 pass |
+| Journeys J1 to J6 in Chromium at 390 px, plus fingerprint sign-in and approval with a virtual authenticator, `checks/journeys.cjs` | 74 of 74 checks pass (including a voice-first journey from first launch: sign-up, fingerprint, payment, with stand-in microphone and voice; and the Gemini reader with a stand-in server) |
 | axe-core WCAG 2.0 to 2.2 A/AA rules, every screen, standard and high contrast, `checks/axe.cjs` | 0 violations in 36 scans |
 | TalkBack on a low-cost Android phone (T-08) | **Not yet done** |
 | VoiceOver on iPhone (T-09), NVDA on desktop (T-10) | **Not yet done** |
@@ -123,7 +123,7 @@ Tap anywhere ─> WAYMARK speaks (speechSynthesis) ─> tone ─> listens (brows
       │                          assistant.js: sign-up (phone, code, fingerprint), sign-in, payments
       │                                 │  interpreter.js reads the words
       │                                 │    today: rules in intent.js, on the phone
-      │                                 │    next:  Claude, via a small server holding the key
+      │                                 │    or:    Gemini, via server/gemini-worker.js (holds the key)
       │                                 ▼
       │                          dialog.js decides what to say: answer, ask for the amount or bank,
       │                          read back the owner, or read the payment summary. It never sends money.
@@ -133,7 +133,9 @@ Tap anywhere + fingerprint ─> bank boundary ─> outcome spoken from the bank'
 
 ui/talk.js handles turn-taking: WAYMARK never listens while it is talking, and a tap stops either at once.
 
-Speech-to-text in Chrome sends audio to Google; Help says so. The interpreter returns the same request shapes whichever reader is plugged in, so adding Claude changes one file.
+Speech-to-text in Chrome sends audio to Google; Help says so. Both readers return the same request shapes, so the conversation rules do not change.
+
+**Gemini (optional).** `server/gemini-worker.js` is a Cloudflare Worker that holds the Gemini key and asks Gemini what a sentence means, with a fixed JSON schema. Only the sentence and the demo bank names are sent; balances and saved payees stay on the phone, and payee names are matched there. "Yes" and "no" never leave the phone. The answer is checked on the phone before use, and if the server is slow (4 s), down or odd, the rules answer instead. Gemini never moves money. To switch it on, follow [docs/AI-SETUP.md](docs/AI-SETUP.md), then put the Worker address in `app/config.js`. The reader is not tied to Gemini: another provider means changing that one server file.
 
 ## Hosting
 
@@ -145,7 +147,9 @@ Speech-to-text in Chrome sends audio to Google; Help says so. The interpreter re
 app/
   index.html, styles.css, sw.js, manifest.webmanifest
   bank/     bank boundary, DemoBank, transfer client (timeouts and status checks)
-  voice/    command reader (rules today, Claude later), conversation rules, listening and tones
+  voice/    assistant, command readers (rules, or Gemini via the server), conversation rules, listening and tones
+  config.js where the AI server is (empty: rules only)
+server/     Cloudflare Worker that holds the Gemini key
   domain/   money, spoken forms, validation, transfer state machine, ledger, name lookup (pure, no DOM)
   ui/       routing, screens, focus and announcements, haptics, sessionStorage
   data/     fictional seed data

@@ -347,6 +347,39 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await vctx.close();
   check('no JS errors in voice journey', errors.length === 0, errors.join(' || '));
 
+  // Gemini reader switched on (config.js and the server are stand-ins here): an unusual sentence
+  // is understood, and only the sentence and bank names are sent.
+  const gctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const gSent = [];
+  await gctx.route('**/config.js', (r) => r.fulfill({ contentType: 'text/javascript', body: "export const AI_ENDPOINT = 'https://ai.waymark.test';" }));
+  await gctx.route('https://ai.waymark.test/interpret', (r) => {
+    gSent.push(JSON.parse(r.request().postData()));
+    r.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ intent: { type: 'balance' } }) });
+  });
+  const gp = await gctx.newPage();
+  gp.on('pageerror', (e) => errors.push(String(e)));
+  await gp.goto(BASE + '#start');
+  await gp.getByRole('link', { name: 'Start the demo' }).click();
+  await gp.getByLabel('Mobile number').fill('08031234567');
+  await gp.getByRole('button', { name: 'Continue' }).click();
+  await gp.getByLabel('Code').fill('123456');
+  await gp.getByRole('button', { name: 'Continue' }).click();
+  await gp.getByRole('link', { name: 'Create a pin' }).click();
+  await gp.getByLabel('New demo PIN').fill('2580');
+  await gp.getByLabel('Enter the demo PIN again').fill('2580');
+  await gp.getByRole('button', { name: 'Sign in' }).click();
+  await gp.waitForFunction(() => document.querySelector('h1')?.textContent === 'Home');
+  await gp.goto(BASE + '#talk');
+  check('gemini: privacy note names Gemini', (await gp.locator('.talk-note').innerText()).includes('Gemini'));
+  await gp.getByText('Conversation, and typing instead').click();
+  await gp.getByLabel('Type instead').fill('wetin remain for my account');
+  await gp.getByRole('button', { name: 'Send', exact: true }).click();
+  await gp.waitForFunction(() => document.getElementById('voice-log').innerText.includes('balance is'), null, { timeout: 8000 }).catch(() => {});
+  check('gemini: Pidgin balance question understood', (await gp.locator('#voice-log').innerText()).includes('Your demo balance is 245,800 naira.'));
+  check('gemini: only the sentence and bank names sent', gSent.length === 1 && Object.keys(gSent[0]).sort().join() === 'banks,text');
+  await gctx.close();
+  check('no JS errors in gemini journey', errors.length === 0, errors.join(' || '));
+
   console.log(results.join('\n'));
   if (results.some((r) => r.startsWith('FAIL'))) process.exitCode = 1;
   await browser.close();

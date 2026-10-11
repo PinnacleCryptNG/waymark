@@ -14,6 +14,7 @@ import { BANKS, bankName, DEMO_OTP } from '../data/seed.js';
 import { hapticsSupported } from './haptics.js';
 import { EXAMPLES } from '../voice/dialog.js';
 import { TALK_STATUS } from './talk.js';
+import { AI_ENDPOINT } from '../config.js';
 import { recognitionSupported } from '../voice/speech.js';
 
 const h1 = (text) => `<h1 id="page-title" tabindex="-1">${esc(text)}</h1>`;
@@ -399,7 +400,7 @@ export function talk(state) {
         <span class="talk-target__label">Tap anywhere to talk</span>
         <span class="talk-target__status" id="talk-status" aria-hidden="true">${esc(status)}</span>
       </button>
-      <p class="talk-note">Demo only. No real money moves. In Chrome, your speech is sent to Google to turn it into text.</p>
+      <p class="talk-note">Demo only. No real money moves. ${AI_ENDPOINT ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Your balance and saved payees stay on this phone.' : 'In Chrome, your speech is sent to Google to turn it into text.'}</p>
       <p><a href="${state.signedIn ? '#home' : '#start'}">Use the screens instead</a></p>
       <details class="talk-more">
         <summary>Conversation, and typing instead</summary>
@@ -424,7 +425,7 @@ export function help(state) {
       <section aria-labelledby="h-approve"><h2 id="h-approve">Approving payments</h2>
         <p>If you chose your fingerprint, one touch on the sensor approves a payment. Nothing is spoken or typed. If you chose a ${PIN}, your phone's keyboard may read keys aloud as you touch them, so use headphones. In this demo the phone confirms the fingerprint; a real bank would also check it on its own servers.</p></section>
       <section aria-labelledby="h-voice"><h2 id="h-voice">Talking to WAYMARK</h2>
-        <p>WAYMARK starts by voice and speaks for itself, so you do not need a screen reader. Tap anywhere on the Talk screen and it speaks to you; after it finishes, a rising tone means it is listening and a falling tone means it has stopped. Tap at any time to interrupt. You can sign up, check your balance, hear recent activity and pay people by voice. ${esc(EXAMPLES)} Before sending, WAYMARK reads back who, how much and the fee; you send by tapping and touching your fingerprint sensor. Voice payments are limited to 50,000 naira. Say repeat to hear something again, or screens to use the screens. In Chrome, your speech is sent to Google to turn it into text.</p></section>
+        <p>WAYMARK starts by voice and speaks for itself, so you do not need a screen reader. Tap anywhere on the Talk screen and it speaks to you; after it finishes, a rising tone means it is listening and a falling tone means it has stopped. Tap at any time to interrupt. You can sign up, check your balance, hear recent activity and pay people by voice. ${esc(EXAMPLES)} Before sending, WAYMARK reads back who, how much and the fee; you send by tapping and touching your fingerprint sensor. Voice payments are limited to 50,000 naira. Say repeat to hear something again, or screens to use the screens. ${AI_ENDPOINT ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Only the sentence is sent; your balance and saved payees stay on this phone. If Gemini cannot be reached, WAYMARK uses its built-in rules.' : 'In Chrome, your speech is sent to Google to turn it into text.'}</p></section>
       <section aria-labelledby="h-status"><h2 id="h-status">What each transfer status means</h2>
         <dl class="glossary">
           <dt>Completed</dt><dd>The money has gone. Your balance shows the debit once.</dd>
