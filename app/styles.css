@@ -296,3 +296,19 @@ details.demo-switch fieldset { border: 0; padding: 0; margin: 0.5rem 0 0; }
 .voice-log__item { padding: 0.6rem 0.85rem; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--rule); overflow-wrap: anywhere; }
 .voice-log__item--waymark { border-left: 6px solid var(--accent); }
 .voice-log__who { font-weight: 700; }
+
+/* Talk screen: one huge target. Tap anywhere to start, interrupt, or approve. */
+.talk-title { font-size: 1.25rem; margin: 0 0 0.75rem; text-align: center; letter-spacing: 0.08em; }
+.talk-target {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;
+  width: 100%; min-height: 62vh; padding: 1.5rem;
+  font: inherit; color: var(--accent-ink); background: var(--accent);
+  border: 0; border-radius: calc(var(--radius) * 2); cursor: pointer; text-align: center;
+}
+.talk-target__label { font-size: 1.75rem; font-weight: 800; line-height: 1.2; }
+.talk-target__status { font-size: 1.125rem; max-width: 22rem; }
+.talk-note { color: var(--muted); font-size: 0.9375rem; margin: 1rem 0 0.5rem; }
+.talk-more { margin-top: 1rem; }
+.talk-more summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
+.talk-more form { margin-top: 1rem; }
+html[data-contrast="high"] .talk-target { border: 3px solid var(--accent-ink); }

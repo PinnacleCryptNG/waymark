@@ -1,23 +1,29 @@
-// Listening and speaking. Everything here has a non-visual signal: a tone when listening
-// starts and stops, a short vibration, and replies announced to the screen reader.
+// Listening and speaking. WAYMARK speaks for itself, so a screen reader is not required.
+// Every state has a non-visual signal: a tone when listening starts and stops, a short
+// vibration, and spoken replies.
 //
 // Privacy: in Chrome, the browser's speech recognition sends audio to Google. Say so in Help.
 
 export const recognitionSupported = () =>
   typeof window !== 'undefined' && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
 
+export const speechOutputSupported = () => typeof window !== 'undefined' && 'speechSynthesis' in window;
+
 /**
- * Listen for one command. Resolves { ok: true, transcript } or { ok: false, reason }
- * where reason is 'no-speech', 'not-allowed', 'network', 'unsupported' or another browser code.
+ * Start listening for one command. Returns { done, abort } where done resolves to
+ * { ok: true, transcript } or { ok: false, reason } ('no-speech', 'not-allowed', 'network',
+ * 'unsupported', 'aborted' or another browser code). Gives up after `timeoutMs`.
  */
-export function listenOnce({ lang = 'en-NG', timeoutMs = 12000 } = {}) {
+export function startListening({ lang = 'en-NG', timeoutMs = 12000 } = {}) {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition) return Promise.resolve({ ok: false, reason: 'unsupported' });
-  return new Promise((resolve) => {
-    const r = new Recognition();
-    let done = false;
+  if (!Recognition) return { done: Promise.resolve({ ok: false, reason: 'unsupported' }), abort() {} };
+  let r;
+  let finish;
+  const done = new Promise((resolve) => {
+    let settled = false;
     let timer;
-    const finish = (value) => { if (!done) { done = true; clearTimeout(timer); resolve(value); } };
+    finish = (value) => { if (!settled) { settled = true; clearTimeout(timer); resolve(value); } };
+    r = new Recognition();
     // Never leave the user stuck on "Listening": give up after a while and say so.
     timer = setTimeout(() => { try { r.abort(); } catch { /* already stopped */ } finish({ ok: false, reason: 'no-speech' }); }, timeoutMs);
     r.lang = lang;
@@ -29,17 +35,59 @@ export function listenOnce({ lang = 'en-NG', timeoutMs = 12000 } = {}) {
     r.onend = () => finish({ ok: false, reason: 'no-speech' });
     try { r.start(); } catch { finish({ ok: false, reason: 'error' }); }
   });
+  return {
+    done,
+    abort() {
+      finish({ ok: false, reason: 'aborted' });
+      try { r.abort(); } catch { /* already stopped */ }
+    },
+  };
 }
 
-/** Speak a reply with the phone's own voice, for people not using a screen reader. */
+export const listenOnce = (opts) => startListening(opts).done;
+
+function pickVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find((v) => v.lang === 'en-NG')
+    ?? voices.find((v) => v.lang === 'en-GB')
+    ?? voices.find((v) => v.lang?.startsWith('en'))
+    ?? null;
+}
+
+/**
+ * Speak with the phone's own voice. Resolves when finished or cancelled, so the app never
+ * listens while it is still talking (it would hear itself).
+ */
+export function speak(text) {
+  if (!text || !speechOutputSupported()) return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    const end = () => { if (!settled) { settled = true; clearTimeout(timer); resolve(); } };
+    // Safety net: some browsers never fire 'end'. Allow roughly normal speaking speed.
+    const timer = setTimeout(end, 2000 + text.length * 90);
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      const voice = pickVoice();
+      if (voice) u.voice = voice;
+      u.lang = voice?.lang ?? 'en-NG';
+      u.rate = 1;
+      u.onend = end;
+      u.onerror = end;
+      window.speechSynthesis.speak(u);
+    } catch {
+      end();
+    }
+  });
+}
+
+export function stopSpeaking() {
+  try { window.speechSynthesis?.cancel(); } catch { /* nothing to stop */ }
+}
+
+/** Kept for the screen-reader path: speak without waiting. */
 export function speakAloud(text) {
-  try {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-NG';
-    window.speechSynthesis.speak(u);
-  } catch { /* speech output unavailable: the reply is still announced and shown */ }
+  stopSpeaking();
+  speak(text);
 }
 
 let audio;
@@ -58,13 +106,13 @@ export function tone(kind) {
     osc.connect(gain).connect(audio.destination);
     osc.start(t);
     osc.stop(t + ms / 1000);
-  } catch { /* no audio: the spoken announcement still says "Listening" */ }
+  } catch { /* no audio: spoken replies still work */ }
 }
 
 export const RECOGNITION_MESSAGES = {
-  'no-speech': "I didn't hear anything. Double-tap Start talking and speak after the tone.",
-  'not-allowed': 'The microphone is blocked. Allow microphone access for this site in your browser settings, or type instead.',
-  'service-not-allowed': 'The microphone is blocked. Allow microphone access for this site in your browser settings, or type instead.',
-  network: 'Voice needs an internet connection in this browser. Check your connection, or type instead.',
-  unsupported: 'Voice input is not available in this browser. Use Chrome on Android, or type instead.',
+  'no-speech': "I didn't hear anything. Tap anywhere and speak after the tone.",
+  'not-allowed': 'The microphone is blocked for this website. In Chrome, open the menu, then Site settings, then Microphone, and allow it.',
+  'service-not-allowed': 'The microphone is blocked for this website. In Chrome, open the menu, then Site settings, then Microphone, and allow it.',
+  network: 'Voice needs an internet connection in this browser. Check your connection and tap anywhere to try again.',
+  unsupported: 'This browser cannot listen. Please use Chrome on Android.',
 };

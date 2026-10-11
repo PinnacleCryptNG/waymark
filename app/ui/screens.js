@@ -13,6 +13,8 @@ import { STATUS_LABEL } from '../domain/transfer.js';
 import { BANKS, bankName, DEMO_OTP } from '../data/seed.js';
 import { hapticsSupported } from './haptics.js';
 import { EXAMPLES } from '../voice/dialog.js';
+import { TALK_STATUS } from './talk.js';
+import { recognitionSupported } from '../voice/speech.js';
 
 const h1 = (text) => `<h1 id="page-title" tabindex="-1">${esc(text)}</h1>`;
 const h1Html = (html) => `<h1 id="page-title" tabindex="-1">${html}</h1>`;
@@ -141,7 +143,7 @@ export function home(state) {
     nav: 'home',
     html: `${h1('Home')}
       ${state.ui.flash ? `<p class="flash" role="status">${esc(state.ui.flash)}</p>` : ''}
-      <div class="actions"><a class="button button--talk" href="#voice">Talk to WAYMARK</a></div>
+      <div class="actions"><a class="button button--talk" href="#talk">Talk to WAYMARK</a></div>
       <section class="balance" aria-labelledby="bal-h">
         <h2 id="bal-h">Balance</h2>
         <p class="balance__amount"><span class="sr-only">Demo balance, </span>${money(state.bankData.account.balanceKobo)}</p>
@@ -378,26 +380,35 @@ const voiceLogItem = (entry) =>
 export const voiceLogHtml = (log) =>
   log.length ? log.map(voiceLogItem).join('') : '<li class="muted">Nothing yet.</li>';
 
-export function voice(state) {
-  const errs = state.ui.errors;
+/**
+ * The voice screen, and the first screen anyone sees. Almost the whole screen is one button:
+ * tap anywhere to talk. WAYMARK speaks for itself, so no screen reader is needed; with
+ * TalkBack on, a double-tap anywhere works the same way.
+ */
+export function talk(state) {
+  const canListen = recognitionSupported();
+  const status = !canListen
+    ? 'This browser cannot listen. Use Chrome on Android, or type below.'
+    : state.voice.status ?? TALK_STATUS.ready;
   return {
-    title: 'Talk to WAYMARK',
+    title: 'Talk',
     nav: 'voice',
-    html: `${h1('Talk to WAYMARK')}
-      ${state.voiceSupported
-        ? `<p>Double-tap Start talking. After the tone, say what you want.</p>
-           <button type="button" class="button button--talk" id="voice-btn" data-action="voice-start">Start talking</button>`
-        : '<p>Voice input is not available in this browser. Use Chrome on Android, or type a command below.</p>'}
-      <p class="hint">${esc(EXAMPLES)}</p>
-      <section aria-labelledby="conv-h">
-        <h2 id="conv-h">Conversation</h2>
+    focus: '#talk-btn',
+    html: `<h1 id="page-title" tabindex="-1" class="talk-title">WAYMARK</h1>
+      <button type="button" id="talk-btn" class="talk-target">
+        <span class="talk-target__label">Tap anywhere to talk</span>
+        <span class="talk-target__status" id="talk-status" aria-hidden="true">${esc(status)}</span>
+      </button>
+      <p class="talk-note">Demo only. No real money moves. In Chrome, your speech is sent to Google to turn it into text.</p>
+      <p><a href="${state.signedIn ? '#home' : '#start'}">Use the screens instead</a></p>
+      <details class="talk-more">
+        <summary>Conversation, and typing instead</summary>
         <ol class="voice-log" id="voice-log">${voiceLogHtml(state.voice.log)}</ol>
-      </section>
-      <form data-form="voice-text" novalidate>
-        ${textField({ id: 'voice-input', label: 'Type a command', error: errorFor(errs, 'voice-input'), required: false })}
-        <button class="button button--secondary" type="submit">Send command</button>
-      </form>
-      <p class="hint">Voice can prepare a payment but never send one. You always confirm with your fingerprint or ${PIN}.</p>`,
+        <form data-form="talk-text" novalidate>
+          ${textField({ id: 'talk-input', label: 'Type instead', required: false })}
+          <button class="button button--secondary" type="submit">Send</button>
+        </form>
+      </details>`,
   };
 }
 
@@ -413,7 +424,7 @@ export function help(state) {
       <section aria-labelledby="h-approve"><h2 id="h-approve">Approving payments</h2>
         <p>If you chose your fingerprint, one touch on the sensor approves a payment. Nothing is spoken or typed. If you chose a ${PIN}, your phone's keyboard may read keys aloud as you touch them, so use headphones. In this demo the phone confirms the fingerprint; a real bank would also check it on its own servers.</p></section>
       <section aria-labelledby="h-voice"><h2 id="h-voice">Talking to WAYMARK</h2>
-        <p>On Home, choose Talk to WAYMARK, then Start talking. A rising tone means it is listening; a falling tone means it has stopped. ${esc(EXAMPLES)} Voice payments are limited to 50,000 naira and always need your fingerprint or ${PIN} to send. In Chrome, your speech is sent to Google to turn it into text, so do not say anything private you would not say aloud.</p></section>
+        <p>WAYMARK starts by voice and speaks for itself, so you do not need a screen reader. Tap anywhere on the Talk screen and it speaks to you; after it finishes, a rising tone means it is listening and a falling tone means it has stopped. Tap at any time to interrupt. You can sign up, check your balance, hear recent activity and pay people by voice. ${esc(EXAMPLES)} Before sending, WAYMARK reads back who, how much and the fee; you send by tapping and touching your fingerprint sensor. Voice payments are limited to 50,000 naira. Say repeat to hear something again, or screens to use the screens. In Chrome, your speech is sent to Google to turn it into text.</p></section>
       <section aria-labelledby="h-status"><h2 id="h-status">What each transfer status means</h2>
         <dl class="glossary">
           <dt>Completed</dt><dd>The money has gone. Your balance shows the debit once.</dd>
@@ -447,8 +458,6 @@ export function settings(state) {
         </fieldset>
         <div class="check"><input type="checkbox" id="highContrast" name="highContrast"${p.highContrast ? ' checked' : ''}><label for="highContrast">High contrast</label></div>
         <div class="check"><input type="checkbox" id="reducedMotion" name="reducedMotion"${p.reducedMotion ? ' checked' : ''}><label for="reducedMotion">Reduce motion</label></div>
-        <div class="check"><input type="checkbox" id="speakReplies" name="speakReplies" aria-describedby="speak-hint"${p.speakReplies ? ' checked' : ''}><label for="speakReplies">Speak voice replies aloud</label>
-          <p class="hint" id="speak-hint">For people not using a screen reader. If your screen reader is on, leave this off so you do not hear replies twice.</p></div>
         <div class="check"><input type="checkbox" id="haptics" name="haptics" aria-describedby="haptics-hint"${p.haptics ? ' checked' : ''}><label for="haptics">Vibrate on transfer outcome</label>
           <p class="hint" id="haptics-hint">${supported ? 'A different vibration for each outcome. Never the only signal.' : 'This browser cannot vibrate, so this setting has no effect here.'}</p></div>
       </form>

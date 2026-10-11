@@ -11,7 +11,7 @@ A blind customer can pay a brand-new account number privately and confidently, w
 - **Name check before paying.** Type a 10-digit account number and choose a bank. WAYMARK looks up the account name in a fictional directory, reads it once, offers **Spell name**, and asks for a separate confirmation.
 - **Lookalike warning.** If the name looks like a saved beneficiary but the number is different, WAYMARK says so before you can continue.
 - **Fingerprint approval.** Sign-in and payments are approved with the phone's own fingerprint or face unlock (WebAuthn). Nothing is spoken or typed, so nothing can be overheard. A returning user signs in with one touch. A 4-digit demo pin remains as a fallback; when screen-reader users type it, the keyboard reads each key aloud, so WAYMARK says to use headphones.
-- **Talk to WAYMARK.** Say "what is my balance", "send 5,000 naira to Musa" or "pay 0198765432 at Lagoon Bank, 2,000 naira". A rising tone means listening; a falling tone means done. Replies are announced to the screen reader (or spoken aloud, if chosen in Settings). For a new account, WAYMARK reads out the owner's name, with any lookalike warning, and continues only on a clear "yes". A prepared payment opens Review with the summary already being read, so the next swipe is **Confirm with fingerprint**. Voice never sends money and is limited to ₦50,000 per payment. Commands can also be typed.
+- **Voice first, no screen reader needed.** The first screen is one big button: tap anywhere and WAYMARK speaks with the phone's own voice, then listens. Sign-up is spoken from the very start: say your mobile number, say the code, then tap anywhere and touch the fingerprint sensor. After that, say "what is my balance", "send 5,000 naira to Musa" or "pay 0198765432 at Lagoon Bank, 2,000 naira". WAYMARK reads back who, how much, the fee and the total from the bank's own figures; to send, tap anywhere and touch the fingerprint sensor. "Yes" alone never sends. A tap always interrupts. A rising tone means listening, a falling tone means done. For a new account, WAYMARK reads the owner's name, with any lookalike warning, and continues only on a clear "yes". Voice payments are limited to ₦50,000; "use the screens" switches to the screen-reader path at any time. A returning user taps once and touches the sensor to sign in.
 - **Fewer steps.** Saved payees are one-tap "Pay" buttons on Home and Pay. The Review screen opens with one sentence that says who, how much, the fee and the total, followed directly by the approve button. Demo-only controls are collapsed out of the way.
 - **Outcomes you can trust.** Completed, Failed, Pending and Outcome unknown are four separate states. Pending and unknown offer **Check status** only, never "send again".
 - **Outcome vibrations.** On Android, each outcome has its own vibration pattern alongside the spoken heading.
@@ -80,9 +80,9 @@ Target: WCAG 2.2 AA. What is in place:
 
 | Check | Result |
 | --- | --- |
-| Unit tests, `npm test` (T-01 to T-07, the bank boundary, and the voice reader and dialog) | 56 of 56 pass |
-| Journeys J1 to J6 in Chromium at 390 px, plus fingerprint sign-in and approval with a virtual authenticator, `checks/journeys.cjs` | 62 of 62 checks pass (including a voice journey with a stand-in speech recogniser) |
-| axe-core WCAG 2.0 to 2.2 A/AA rules, every screen, standard and high contrast, `checks/axe.cjs` | 0 violations in 34 scans |
+| Unit tests, `npm test` (T-01 to T-07, the bank boundary, the voice reader and dialog, and the voice assistant) | 67 of 67 pass |
+| Journeys J1 to J6 in Chromium at 390 px, plus fingerprint sign-in and approval with a virtual authenticator, `checks/journeys.cjs` | 70 of 70 checks pass (including a voice-first journey from first launch: sign-up, fingerprint, payment, with stand-in microphone and voice) |
+| axe-core WCAG 2.0 to 2.2 A/AA rules, every screen, standard and high contrast, `checks/axe.cjs` | 0 violations in 36 scans |
 | TalkBack on a low-cost Android phone (T-08) | **Not yet done** |
 | VoiceOver on iPhone (T-09), NVDA on desktop (T-10) | **Not yet done** |
 | Testing with blind and low-vision users | **Not yet done** |
@@ -118,15 +118,20 @@ Going live means writing a second adapter with the same methods that calls the b
 ## Voice architecture
 
 ```
-Start talking ─> tone ─> browser speech-to-text ─> interpreter (app/voice/interpreter.js)
-                                                     │  today: rules in intent.js, on the phone
-                                                     │  next:  Claude, via a small server holding the key
-                                                     ▼
-                         dialog.js decides what to say or do: answer, ask for the amount or bank,
-                         read back the account owner, or open Review. It never sends money.
-                                                     ▼
-                         Review ─> Confirm with fingerprint ─> bank boundary
+Tap anywhere ─> WAYMARK speaks (speechSynthesis) ─> tone ─> listens (browser speech-to-text)
+      │                                                         ▼
+      │                          assistant.js: sign-up (phone, code, fingerprint), sign-in, payments
+      │                                 │  interpreter.js reads the words
+      │                                 │    today: rules in intent.js, on the phone
+      │                                 │    next:  Claude, via a small server holding the key
+      │                                 ▼
+      │                          dialog.js decides what to say: answer, ask for the amount or bank,
+      │                          read back the owner, or read the payment summary. It never sends money.
+      ▼
+Tap anywhere + fingerprint ─> bank boundary ─> outcome spoken from the bank's own figures
 ```
+
+ui/talk.js handles turn-taking: WAYMARK never listens while it is talking, and a tap stops either at once.
 
 Speech-to-text in Chrome sends audio to Google; Help says so. The interpreter returns the same request shapes whichever reader is plugged in, so adding Claude changes one file.
 

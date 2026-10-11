@@ -19,8 +19,9 @@ import { announce, focusElement } from './dom.js';
 import { prefsStore, bankStorage, credentialStore, DEFAULT_PREFS } from './store.js';
 import { biometricAvailable, registerBiometric, verifyBiometric } from './biometric.js';
 import { createRuleInterpreter } from '../voice/interpreter.js';
-import { respond, afterLookup, newDialog } from '../voice/dialog.js';
-import { recognitionSupported, listenOnce, speakAloud, tone, RECOGNITION_MESSAGES } from '../voice/speech.js';
+import { createAssistant } from '../voice/assistant.js';
+import { speak, stopSpeaking, startListening, tone } from '../voice/speech.js';
+import { createTalkDriver } from './talk.js';
 import { playOutcome } from './haptics.js';
 
 const bank = assertBank(createDemoBank({ storage: bankStorage }));
@@ -39,8 +40,7 @@ const state = {
   attempts: {}, // transfer attempts as this device knows them, by transfer id
   auth: { method: null }, // 'biometric' or 'pin', chosen at sign-in
   biometric: { available: false, credentialId: credentialStore.load() },
-  voiceSupported: recognitionSupported(),
-  voice: { dialog: newDialog(), log: [], busy: false },
+  voice: { log: [], status: null },
   bankData: { account: null, activity: [], beneficiaries: [] },
   ui: { errors: null, focus: null, submitting: false, checking: false, flash: '', confirmReset: false, loadingAttempt: false },
 };
@@ -54,10 +54,12 @@ async function refreshBankData() {
 
 // ---------- Routing ----------
 
-const PUBLIC = new Set(['welcome', 'signin', 'otp', 'secure', 'create-pin', 'help', 'settings']);
+const PUBLIC = new Set(['welcome', 'talk', 'start', 'signin', 'otp', 'secure', 'create-pin', 'help', 'settings']);
 
 const SCREENS = {
-  welcome: screens.welcome,
+  welcome: screens.talk, // voice first: the first screen is the Talk screen
+  talk: screens.talk,
+  start: screens.welcome, // the screens-based start, for anyone who prefers it
   signin: screens.signin,
   otp: screens.otp,
   secure: screens.secure,
@@ -69,7 +71,6 @@ const SCREENS = {
   'pay-new': screens.payNew,
   amount: screens.amount,
   review: screens.review,
-  voice: screens.voice,
   outcome: screens.outcome,
   cancelled: screens.cancelled,
   help: screens.help,
@@ -85,7 +86,7 @@ function parseRoute() {
 function guard({ name }) {
   if (!name) return state.signedIn ? 'home' : 'welcome';
   if (!state.signedIn && !PUBLIC.has(name)) return 'welcome';
-  if (state.signedIn && ['welcome', 'signin', 'otp', 'secure', 'create-pin'].includes(name)) return 'home';
+  if (state.signedIn && ['welcome', 'start', 'signin', 'otp', 'secure', 'create-pin'].includes(name)) return 'home';
   if (name === 'otp' && !state.form.phoneOk) return 'signin';
   if ((name === 'secure' || name === 'create-pin') && !state.form.otpOk) return 'signin';
   if (name === 'amount' && !state.flow.payee) return 'pay';
@@ -111,7 +112,7 @@ function render() {
   document.title = `${screen.title} · WAYMARK demo`;
   updateNav(screen.nav);
 
-  const target = state.ui.focus;
+  const target = state.ui.focus ?? screen.focus;
   state.ui.focus = null;
   state.ui.flash = '';
   if (target === 'errors') focusElement(document.getElementById('error-summary'));
@@ -148,6 +149,8 @@ function updateNav(current) {
 }
 
 window.addEventListener('hashchange', () => {
+  // Leaving the Talk screen ends the conversation: nothing should keep talking or listening.
+  if (!['talk', 'welcome'].includes(parseRoute().name)) talk.stop();
   state.ui.errors = null;
   state.ui.confirmReset = false;
   render();
@@ -221,73 +224,95 @@ async function startReview() {
 
 // ---------- Voice ----------
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const voiceContext = () => ({
+  beneficiaries: state.bankData.beneficiaries,
+  banks: BANKS,
+  balanceKobo: state.bankData.account?.balanceKobo ?? 0,
+  activity: state.bankData.activity,
+});
 
-/** Add a line to the conversation without re-rendering, so focus stays where the user is. */
-function voiceLog(who, text) {
+function talkLog(who, text) {
   state.voice.log.push({ who, text });
   const list = document.getElementById('voice-log');
   if (list) list.innerHTML = screens.voiceLogHtml(state.voice.log);
 }
 
-/** WAYMARK's reply: shown, announced to the screen reader, and spoken aloud if the user chose that. */
-function voiceReply(text, { announceIt = true } = {}) {
-  voiceLog('waymark', text);
-  if (announceIt) announce(text);
-  if (state.prefs.speakReplies) speakAloud(text);
+function talkStatus(text) {
+  state.voice.status = text;
+  const el = document.getElementById('talk-status');
+  if (el) el.textContent = text;
 }
 
-const voiceContext = () => ({
-  beneficiaries: state.bankData.beneficiaries,
-  banks: BANKS,
-  balanceKobo: state.bankData.account.balanceKobo,
-  activity: state.bankData.activity,
-});
-
-async function handleUtterance(text) {
-  const said = String(text ?? '').trim();
-  if (!said || state.voice.busy) return;
-  state.voice.busy = true;
-  voiceLog('you', said);
-  try {
-    const ctx = voiceContext();
-    const intent = await interpreter.interpret(said, ctx);
-    let result = respond(state.voice.dialog, intent, ctx);
-    state.voice.dialog = result.dialog;
-
-    if (result.action?.type === 'lookup') {
-      voiceReply(result.reply);
-      const { accountNumber, bankCode, amountKobo } = result.action;
-      let found;
-      try {
-        found = await bank.lookupName({ bankCode, accountNumber });
-      } catch {
-        voiceReply(MESSAGES.network);
-        return;
-      }
-      const lookalike = found.ok ? findLookalike(ctx.beneficiaries, found) : null;
-      result = afterLookup(found, lookalike, amountKobo, ctx);
-      state.voice.dialog = result.dialog;
-    }
-
-    if (result.action?.type === 'review') {
-      // Hand over to the normal Review screen. Its summary sentence gets focus, so the screen
-      // reader reads the whole payment at once; the next swipe is the confirm button.
-      const { payee, amountKobo } = result.action;
-      voiceReply(result.reply, { announceIt: false });
+function makeAssistant() {
+  return createAssistant({
+    interpreter,
+    bank,
+    banks: BANKS,
+    biometric: {
+      get available() { return state.biometric.available; },
+      register: registerBiometric,
+      verify: verifyBiometric,
+    },
+    credential: {
+      get: () => state.biometric.credentialId,
+      save: (id) => { credentialStore.save(id); state.biometric.credentialId = id; },
+    },
+    session: {
+      signedIn: () => state.signedIn,
+      authMethod: () => state.auth.method,
+      async signIn(method) {
+        await refreshBankData();
+        state.auth = { method };
+        state.signedIn = true;
+        state.form = {};
+        // Stay in the conversation; just make the address and menu match the signed-in state.
+        history.replaceState(null, '', '#talk');
+        updateNav('voice');
+      },
+      async refresh() { try { await refreshBankData(); } catch { /* keep the last known balance */ } },
+      context: voiceContext,
+    },
+    transfers: {
+      async send(processing) {
+        state.attempts[processing.operationId] = processing;
+        const result = await sendTransfer(bank, processing, {
+          onSlow: () => talk.progress('Still waiting for the bank. Please do not pay again.'),
+        });
+        state.attempts[result.operationId] = result;
+        playOutcome(result.state, state.prefs.haptics);
+        return result;
+      },
+      async check(attempt) {
+        const updated = await checkTransfer(bank, attempt);
+        state.attempts[updated.operationId] = updated;
+        if (updated !== attempt) playOutcome(updated.state, state.prefs.haptics);
+        return updated;
+      },
+    },
+    progress: (text) => talk.progress(text),
+    switchToScreens: () => { talk.stop(); go(state.signedIn ? 'home' : 'start'); },
+    openReview: (payee, amountKobo) => {
       resetFlow();
       state.flow.payee = { ...payee };
       state.flow.amountText = koboToInputText(amountKobo);
       state.ui.focus = '#review-summary';
-      const error = await startReview();
-      if (error) { state.ui.focus = null; voiceReply(error); }
-      return;
-    }
-    voiceReply(result.reply);
-  } finally {
-    state.voice.busy = false;
-  }
+      startReview();
+    },
+  });
 }
+
+let assistant = makeAssistant();
+
+const talk = createTalkDriver({
+  assistant: () => assistant,
+  speak,
+  stopSpeaking,
+  startListening: () => startListening(),
+  tone,
+  vibrate: (ms) => { try { navigator.vibrate?.(ms); } catch { /* optional */ } },
+  log: talkLog,
+  status: talkStatus,
+});
 
 function applyPrefs() {
   const root = document.documentElement;
@@ -367,11 +392,11 @@ const FORMS = {
     rerender('#lookup-result');
   },
 
-  'voice-text'() {
-    const input = document.getElementById('voice-input');
-    const text = input.value;
+  'talk-text'() {
+    const input = document.getElementById('talk-input');
+    const text = input.value.trim();
     input.value = '';
-    handleUtterance(text);
+    if (text) talk.typed(text);
   },
 
   async amount(form) {
@@ -475,21 +500,6 @@ const ACTIONS = {
     go('amount');
   },
 
-  async 'voice-start'(el) {
-    if (state.voice.busy) return;
-    if (!state.voiceSupported) { voiceReply(RECOGNITION_MESSAGES.unsupported); return; }
-    setBusy(el, 'Listening…');
-    // Let the screen reader finish speaking first, so it is not heard as the command.
-    await sleep(450);
-    tone('start');
-    try { navigator.vibrate?.(40); } catch { /* optional */ }
-    const heard = await listenOnce();
-    tone(heard.ok ? 'stop' : 'error');
-    restore(el, 'Start talking');
-    if (!heard.ok) { voiceReply(RECOGNITION_MESSAGES[heard.reason] ?? "I didn't catch that. Try again, or type instead."); return; }
-    await handleUtterance(heard.transcript);
-  },
-
   'confirm-payee'() {
     const { result } = state.lookup;
     state.flow.payee = { id: null, ...result };
@@ -575,7 +585,9 @@ const ACTIONS = {
     state.biometric.credentialId = null;
     state.form = {};
     state.attempts = {};
-    state.voice = { dialog: newDialog(), log: [], busy: false };
+    talk.stop();
+    state.voice = { log: [], status: null };
+    assistant = makeAssistant();
     state.bankData = { account: null, activity: [], beneficiaries: [] };
     state.ui.confirmReset = false;
     resetFlow();
@@ -583,6 +595,17 @@ const ACTIONS = {
     go('welcome');
   },
 };
+
+// ---------- Talk screen: tap anywhere ----------
+
+// Any tap on the Talk screen that is not on a link, form or the details toggle goes to the
+// conversation. This is what makes "tap anywhere" true, with or without a screen reader.
+document.addEventListener('click', (e) => {
+  if (!['talk', 'welcome'].includes(parseRoute().name)) return;
+  if (e.target.closest('a, input, select, textarea, summary, details, form, nav')) return;
+  e.preventDefault();
+  talk.tap();
+});
 
 // ---------- Event wiring ----------
 
