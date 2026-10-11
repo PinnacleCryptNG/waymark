@@ -3,6 +3,8 @@
 name = "waymark-interpreter"
 main = "server/gemini-worker.js"
 compatibility_date = "2026-09-01"
+workers_dev = true
+preview_urls = false
 
 [vars]
 ALLOWED_ORIGINS = "https://pinnaclecryptng.github.io,http://localhost:8080"
