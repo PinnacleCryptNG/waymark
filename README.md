@@ -10,7 +10,8 @@ A blind customer can pay a brand-new account number privately and confidently, w
 
 - **Name check before paying.** Type a 10-digit account number and choose a bank. WAYMARK looks up the account name in a fictional directory, reads it once, offers **Spell name**, and asks for a separate confirmation.
 - **Lookalike warning.** If the name looks like a saved beneficiary but the number is different, WAYMARK says so before you can continue.
-- **Private PIN entry.** The PIN uses the phone's own secure text field, so TalkBack and VoiceOver do not read the digits. WAYMARK announces only "2 of 4 digits entered".
+- **Fingerprint approval.** Sign-in and payments are approved with the phone's own fingerprint or face unlock (WebAuthn). Nothing is spoken or typed, so nothing can be overheard. A returning user signs in with one touch. A 4-digit demo pin remains as a fallback; when screen-reader users type it, the keyboard reads each key aloud, so WAYMARK says to use headphones.
+- **Fewer steps.** Saved payees are one-tap "Pay" buttons on Home and Pay. The Review screen opens with one sentence that says who, how much, the fee and the total, followed directly by the approve button. Demo-only controls are collapsed out of the way.
 - **Outcomes you can trust.** Completed, Failed, Pending and Outcome unknown are four separate states. Pending and unknown offer **Check status** only, never "send again".
 - **Outcome vibrations.** On Android, each outcome has its own vibration pattern alongside the spoken heading.
 
@@ -35,7 +36,7 @@ To try it on a phone with TalkBack or VoiceOver, run `npm start` on a computer a
 | --- | --- |
 | Mobile number | Any Nigerian mobile number, for example 0803 123 4567 (not stored) |
 | Code | 123456 |
-| PIN | Any 4 digits you choose at sign-in |
+| Approval | Your fingerprint (Android Chrome, iPhone Safari), or a 4-digit pin you choose |
 | New account, plain | 0198765432 at Lagoon Bank (demo) → Chinedu Eze |
 | New account, lookalike warning | 5009988776 at Kola Microfinance (demo) → Adaeze Okafur |
 
@@ -54,13 +55,13 @@ A real app would not have this choice.
 
 ### 90-second demo script
 
-1. Start the demo and sign in with any mobile number, code 123456 and a 4-digit PIN (J1).
+1. Start the demo, enter any mobile number and code 123456, then choose **Use my fingerprint** (J1).
 2. On Home, move by heading to Balance: "Demo balance, 245,800 naira" (J2).
-3. Pay someone → New account → 5009988776, Kola Microfinance. Hear the lookalike warning. Choose **No, change details**.
+3. On Home, choose **Pay a new account** → 5009988776, Kola Microfinance. Hear the lookalike warning. Choose **No, change details**.
 4. Enter 0198765432, Lagoon Bank. Hear "Chinedu Eze", try **Spell name**, then **Yes, pay Chinedu Eze** (J3).
 5. Enter 245800 to show the over-balance error with the amount kept, then correct it to 5000 (J5).
-6. Review, enter the PIN, **Confirm transfer**. The result is announced and activity updates once (J4).
-7. Pay again with **The connection drops after sending**. After 6 seconds with no reply the app says it could not confirm the transfer. The only action is **Check status**, which finds the bank had completed it (J6).
+6. Review: one sentence says who, how much, the fee and the total. Choose **Confirm with fingerprint** and touch the sensor. The result is announced and activity updates once (J4).
+7. On Home, tap **Pay Musa Ibrahim**, then under **Demo controls for judges** choose **The connection drops after sending**. After 6 seconds with no reply the app says it could not confirm the transfer. The only action is **Check status**, which finds the bank had completed it (J6).
 
 ## Accessibility
 
@@ -79,8 +80,8 @@ Target: WCAG 2.2 AA. What is in place:
 | Check | Result |
 | --- | --- |
 | Unit tests, `npm test` (T-01 to T-07, plus the bank boundary) | 42 of 42 pass |
-| Journeys J1 to J6 in Chromium at 390 px, `checks/journeys.cjs` | 40 of 40 checks pass |
-| axe-core WCAG 2.0 to 2.2 A/AA rules, every screen, standard and high contrast, `checks/axe.cjs` | 0 violations in 30 scans |
+| Journeys J1 to J6 in Chromium at 390 px, plus fingerprint sign-in and approval with a virtual authenticator, `checks/journeys.cjs` | 50 of 50 checks pass |
+| axe-core WCAG 2.0 to 2.2 A/AA rules, every screen, standard and high contrast, `checks/axe.cjs` | 0 violations in 32 scans |
 | TalkBack on a low-cost Android phone (T-08) | **Not yet done** |
 | VoiceOver on iPhone (T-09), NVDA on desktop (T-10) | **Not yet done** |
 | Testing with blind and low-vision users | **Not yet done** |
@@ -136,7 +137,7 @@ docs/       PRD and review (Word)
 
 - Money is integer kobo throughout. The fee is a flat ₦10.00 demo fee.
 - One ledger module, inside DemoBank, owns the balance and activity. Submitting the same transfer id twice changes nothing; a double tap on Confirm creates one transfer.
-- The ledger and settings are kept in `sessionStorage` for the browser tab. The demo PIN is held in memory only, so refreshing the page asks you to sign in again. **Settings → Reset demo** restores the starting data.
+- The ledger and settings are kept in `sessionStorage` for the browser tab. The demo pin is held in memory only. The fingerprint credential's id (not a secret; the key never leaves the phone) is kept in `localStorage` so the next visit offers one-touch sign-in. Without a server, the demo trusts the phone's yes or no; a bank would verify the signed answer on its servers. **Settings → Reset demo** restores the starting data.
 - After the first visit, the app works offline (service worker).
 - iPhone browsers cannot vibrate, so iOS users get the spoken outcome only.
 
@@ -149,4 +150,4 @@ docs/       PRD and review (Word)
 
 ## Everything that is simulated
 
-Sign-in, the one-time code, the PIN, the account directory and name enquiry, bank names, balances, transaction history, transfer processing, transfer outcomes and status checks.
+Sign-in, the one-time code, the pin, server-side verification of the fingerprint, the account directory and name enquiry, bank names, balances, transaction history, transfer processing, transfer outcomes and status checks.

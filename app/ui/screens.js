@@ -1,8 +1,11 @@
 // Screen templates. Each returns { title, nav, html }. One H1 per screen, given id="page-title".
 // Visible amounts use dual() so screen readers hear the exact spoken form.
+//
+// Fewer swipes: each key screen opens with one sentence that says everything that matters,
+// followed straight away by the main action. Full details come after, for sighted readers.
 
 import { esc, dual, money, signedMoney, errorSummary, textField, errorFor } from './dom.js';
-import { formatNaira, FEE_KOBO } from '../domain/money.js';
+import { FEE_KOBO } from '../domain/money.js';
 import {
   spokenAccountEnding, maskAccount, spokenReference, spokenDate, spokenDateTime,
 } from '../domain/spoken.js';
@@ -11,48 +14,59 @@ import { BANKS, bankName, DEMO_OTP } from '../data/seed.js';
 import { hapticsSupported } from './haptics.js';
 
 const h1 = (text) => `<h1 id="page-title" tabindex="-1">${esc(text)}</h1>`;
+const h1Html = (html) => `<h1 id="page-title" tabindex="-1">${html}</h1>`;
 const accountEnding = (n) => dual(maskAccount(n), spokenAccountEnding(n));
-const shortDate = (iso) => spokenDate(iso); // same words on screen and in speech
+// Screen readers spell an all-capitals "PIN" letter by letter; say it as a word.
+const PIN = dual('PIN', 'pin');
 
 const statusTag = (status) =>
   `<span class="status status--${esc(status)}">${esc(STATUS_LABEL[status] ?? status)}</span>`;
 
 const sep = '<span class="sr-only">, </span>';
+const row = (k, v) => `<div class="kv"><dt>${esc(k)}</dt><dd>${v}</dd></div>`;
 
 function txItem(t) {
   return `<li class="tx">
     <a class="tx__link" href="#tx/${esc(t.id)}">
       <span class="tx__desc">${esc(t.description)}</span>${sep}
-      <span class="tx__date">${esc(shortDate(t.occurredAt))}</span>${sep}
+      <span class="tx__date">${esc(spokenDate(t.occurredAt))}</span>${sep}
       <span class="tx__amount tx__amount--${t.direction}">${signedMoney(t.direction, t.amountKobo)}</span>${sep}
       ${statusTag(t.status)}
     </a>
   </li>`;
 }
 
-const payeeLine = (p) =>
-  `${esc(p.name)}${sep}<span class="muted"> · ${esc(bankName(p.bankCode))} · ${accountEnding(p.accountNumber)}</span>`;
+/** One-tap "pay this person" buttons. */
+const payeeButtons = (beneficiaries) => `<ul class="choice-list">
+  ${beneficiaries.map((b) => `<li><button type="button" class="choice" data-action="pay-to" data-id="${esc(b.id)}">
+    <span class="choice__title">Pay ${esc(b.name)}</span>${sep}
+    <span class="choice__hint">${esc(bankName(b.bankCode))}, ${accountEnding(b.accountNumber)}</span>
+  </button></li>`).join('')}
+</ul>`;
 
 // ---------- Entry and sign-in ----------
 
-export function welcome() {
+export function welcome(state) {
+  const quick = state.biometric.available && state.biometric.credentialId;
   return {
     title: 'Welcome',
     html: `${h1('WAYMARK')}
+      ${errorSummary(state.ui.errors)}
       <p class="lede">Pay anyone, and hear exactly who you are paying, without asking someone to read your screen.</p>
+      <div class="actions">
+        ${quick ? '<button type="button" class="button" id="bio-signin" data-action="biometric-signin">Sign in with fingerprint</button>' : ''}
+        <a class="button${quick ? ' button--secondary' : ''}" href="#signin">${quick ? 'Sign in another way' : 'Start the demo'}</a>
+      </div>
       <section class="notice" aria-labelledby="demo-h">
         <h2 id="demo-h">This is a demo</h2>
         <ul>
           <li>Every name, account and amount is invented.</li>
           <li>No real money moves, and no real bank is connected.</li>
-          <li>Never type your real PIN, password or card details here.</li>
+          <li>Never type your real ${PIN}, password or card details here.</li>
           <li>This is an independent prototype for Zecathon 6.0. It is not a Zenith Bank service.</li>
         </ul>
       </section>
-      <div class="actions">
-        <a class="button" href="#signin">Start the demo</a>
-        <a class="button button--secondary" href="#help">Help</a>
-      </div>`,
+      <p><a href="#help">Help</a></p>`,
   };
 }
 
@@ -72,14 +86,12 @@ export function signin(state) {
 
 export function otp(state) {
   const errs = state.ui.errors;
+  const last4 = String(state.form.phoneNumber ?? '').slice(-4);
   return {
     title: 'Enter your code',
     html: `${h1('Enter your code')}
       ${errorSummary(errs)}
-      <p>Step 2 of 3.</p>
-      <p>A real bank would text a code to your number ending ${dual(String(state.form.phoneNumber ?? '').slice(-4), String(state.form.phoneNumber ?? '').slice(-4).split('').join(' '))}. In this demo the code is printed here.</p>
-      <p class="demo-value">Demo code: ${dual(DEMO_OTP, DEMO_OTP.split('').join(' '))}</p>
-      <p>This code does not expire. Take as long as you need.</p>
+      <p>Step 2 of 3. A real bank would text a code to your number ending ${dual(last4, last4.split('').join(' '))}. In this demo the code is ${dual(DEMO_OTP, DEMO_OTP.split('').join(' '))}, and it does not expire.</p>
       <form data-form="otp" novalidate>
         ${textField({ id: 'otp', label: 'Code', hint: '6 digits.', error: errorFor(errs, 'otp'), value: state.form.otp ?? '', inputmode: 'numeric' })}
         <button class="button" type="submit">Continue</button>
@@ -87,18 +99,34 @@ export function otp(state) {
   };
 }
 
+export function secure(state) {
+  const available = state.biometric.available;
+  return {
+    title: 'Approve payments',
+    html: `${h1('How do you want to approve payments?')}
+      ${errorSummary(state.ui.errors)}
+      ${available
+        ? `<p>Step 3 of 3. Your fingerprint is the fastest and most private way. One touch approves a payment, and nothing is spoken or typed, so nobody nearby can hear it.</p>
+           <div class="actions">
+             <button type="button" class="button" id="bio-setup" data-action="setup-biometric">Use my fingerprint</button>
+             <a class="button button--secondary" href="#create-pin"><span>Use a ${PIN} instead</span></a>
+           </div>`
+        : `<p>Step 3 of 3. This phone or browser cannot use a fingerprint here, so you will create a demo ${PIN} instead.</p>
+           <div class="actions"><a class="button" href="#create-pin"><span>Create a ${PIN}</span></a></div>`}`,
+  };
+}
+
 export function createPin(state) {
   const errs = state.ui.errors;
   return {
-    title: 'Create a demo PIN',
-    html: `${h1('Create a demo PIN')}
+    title: 'Create a demo pin',
+    html: `${h1Html(`Create a demo ${PIN}`)}
       ${errorSummary(errs)}
-      <p>Step 3 of 3.</p>
-      <p class="warning"><strong>Do not use your real bank PIN.</strong> Make up 4 digits you will remember for this demo.</p>
+      <p class="warning"><strong>Do not use your real bank ${PIN}.</strong> Make up 4 digits for this demo. Your phone's keyboard may read keys aloud as you touch them, so use headphones if you can.</p>
       <form data-form="create-pin" novalidate>
-        ${textField({ id: 'pin1', label: 'New demo PIN', hint: '4 digits. Your screen reader will not read the digits back.', error: errorFor(errs, 'pin1'), type: 'password', inputmode: 'numeric', autocomplete: 'off', extra: 'maxlength="4"' })}
-        ${textField({ id: 'pin2', label: 'Enter the demo PIN again', error: errorFor(errs, 'pin2'), type: 'password', inputmode: 'numeric', autocomplete: 'off', extra: 'maxlength="4"' })}
-        <button class="button" type="submit">Create PIN and sign in</button>
+        ${textField({ id: 'pin1', label: 'New demo PIN', hint: '4 digits.', error: errorFor(errs, 'pin1'), type: 'password', inputmode: 'numeric', autocomplete: 'off', extra: 'maxlength="4" aria-label="New demo pin"' })}
+        ${textField({ id: 'pin2', label: 'Enter the demo PIN again', error: errorFor(errs, 'pin2'), type: 'password', inputmode: 'numeric', autocomplete: 'off', extra: 'maxlength="4" aria-label="Enter the demo pin again"' })}
+        <button class="button" type="submit">Sign in</button>
       </form>`,
   };
 }
@@ -114,13 +142,13 @@ export function home(state) {
       ${state.ui.flash ? `<p class="flash" role="status">${esc(state.ui.flash)}</p>` : ''}
       <section class="balance" aria-labelledby="bal-h">
         <h2 id="bal-h">Balance</h2>
-        <p class="balance__label">Demo savings, available</p>
         <p class="balance__amount"><span class="sr-only">Demo balance, </span>${money(state.bankData.account.balanceKobo)}</p>
       </section>
-      <div class="actions">
-        <a class="button" href="#pay">Pay someone</a>
-        <a class="button button--secondary" href="#activity">View activity</a>
-      </div>
+      <section aria-labelledby="quick-h">
+        <h2 id="quick-h">Pay again</h2>
+        ${payeeButtons(state.bankData.beneficiaries)}
+        <p><a href="#pay-new">Pay a new account</a></p>
+      </section>
       <section aria-labelledby="recent-h">
         <h2 id="recent-h">Recent activity</h2>
         <ol class="tx-list">${recent.map(txItem).join('')}</ol>
@@ -147,7 +175,6 @@ export function txDetail(state, id) {
   if (!t) {
     return { title: 'Transaction not found', nav: 'activity', html: `${h1('Transaction not found')}<p>This transaction is not in your demo activity. It may have been removed by Reset demo.</p><p><a href="#activity">Back to activity</a></p>` };
   }
-  const row = (k, v) => `<div class="kv"><dt>${esc(k)}</dt><dd>${v}</dd></div>`;
   return {
     title: t.description,
     nav: 'activity',
@@ -169,15 +196,14 @@ export function txDetail(state, id) {
 
 // ---------- Paying ----------
 
-export function pay() {
+export function pay(state) {
   return {
     title: 'Pay someone',
     nav: 'pay',
     html: `${h1('Pay someone')}
-      <p>Who do you want to pay?</p>
+      ${payeeButtons(state.bankData.beneficiaries)}
       <ul class="choice-list">
-        <li><a class="choice" href="#pay-new"><span class="choice__title">New account</span><span class="choice__hint">Type an account number. We will tell you whose account it is before you pay.</span></a></li>
-        <li><a class="choice" href="#pay-saved"><span class="choice__title">Saved beneficiary</span><span class="choice__hint">Someone you have paid before.</span></a></li>
+        <li><a class="choice choice--plain" href="#pay-new"><span class="choice__title">Pay a new account</span>${sep}<span class="choice__hint">Type an account number. We will tell you whose account it is before you pay.</span></a></li>
       </ul>`,
   };
 }
@@ -191,8 +217,7 @@ export function payNew(state) {
     ? `<section class="lookup-result${L.lookalike ? ' lookup-result--warn' : ''}" id="lookup-result" tabindex="-1" aria-labelledby="lookup-h">
         <h2 id="lookup-h">${L.lookalike ? 'Check carefully' : 'Account found'}</h2>
         ${L.lookalike ? `<p class="warning"><strong>This is not your saved ${esc(L.lookalike.name)}.</strong> The name is similar, but the account number is different.</p>` : ''}
-        <p>Account name: <strong class="payee-name">${esc(L.result.name)}</strong></p>
-        <p class="muted">${esc(bankName(L.result.bankCode))}, ${accountEnding(L.result.accountNumber)}</p>
+        <p>Account name: <strong class="payee-name">${esc(L.result.name)}</strong>, ${esc(bankName(L.result.bankCode))}, ${accountEnding(L.result.accountNumber)}.</p>
         ${L.spelled ? `<p class="spelled" aria-hidden="true">${esc(L.spelled)}</p>` : ''}
         <div class="actions">
           <button type="button" class="button" data-action="confirm-payee">Yes, pay ${esc(L.result.name)}</button>
@@ -224,31 +249,6 @@ export function payNew(state) {
   };
 }
 
-export function paySaved(state) {
-  const errs = state.ui.errors;
-  const err = errorFor(errs, 'payee');
-  const selected = state.flow.payee?.id;
-  return {
-    title: 'Pay a saved beneficiary',
-    nav: 'pay',
-    html: `${h1('Pay a saved beneficiary')}
-      ${errorSummary(errs)}
-      <form data-form="saved" novalidate>
-        <fieldset class="field${err ? ' field--error' : ''}" ${err ? 'aria-describedby="payee-error"' : ''}>
-          <legend>Choose who to pay</legend>
-          ${err ? `<p class="field-error" id="payee-error"><span class="sr-only">Error: </span>${esc(err)}</p>` : ''}
-          ${state.bankData.beneficiaries.map((b, i) => `
-            <div class="radio">
-              <input type="radio" name="payee" id="${i === 0 ? 'payee' : `payee-${b.id}`}" value="${b.id}"${selected === b.id ? ' checked' : ''}>
-              <label for="${i === 0 ? 'payee' : `payee-${b.id}`}">${payeeLine(b)}</label>
-            </div>`).join('')}
-        </fieldset>
-        <button class="button" type="submit">Continue</button>
-      </form>
-      <p><a href="#pay">Back</a></p>`,
-  };
-}
-
 export function amount(state) {
   const errs = state.ui.errors;
   const p = state.flow.payee;
@@ -257,62 +257,59 @@ export function amount(state) {
     nav: 'pay',
     html: `${h1(`How much to send to ${p.name}?`)}
       ${errorSummary(errs)}
-      <p class="muted">${esc(bankName(p.bankCode))}, ${accountEnding(p.accountNumber)}</p>
       <form data-form="amount" novalidate>
-        ${textField({ id: 'amount', label: 'Amount in naira', hint: `Numbers only, for example 5000. Fee ${money(FEE_KOBO)}. Available demo balance ${money(state.bankData.account.balanceKobo)}.`, error: errorFor(errs, 'amount'), value: state.flow.amountText ?? '', inputmode: 'decimal' })}
-        ${textField({ id: 'note', label: 'Note for the recipient', hint: 'Up to 30 characters.', error: errorFor(errs, 'note'), value: state.flow.note ?? '', required: false })}
+        ${textField({ id: 'amount', label: 'Amount in naira', hint: `Fee ${money(FEE_KOBO)}. Available ${money(state.bankData.account.balanceKobo)}.`, error: errorFor(errs, 'amount'), value: state.flow.amountText ?? '', inputmode: 'decimal' })}
         <button class="button" type="submit">Review transfer</button>
+        ${textField({ id: 'note', label: 'Note for the recipient', hint: 'Up to 30 characters.', error: errorFor(errs, 'note'), value: state.flow.note ?? '', required: false })}
       </form>
       <p><button type="button" class="link" data-action="cancel-transfer">Cancel transfer</button></p>`,
   };
 }
+
+const BEHAVIOURS = [
+  ['normal', 'Normal: the bank completes it'],
+  ['decline', 'The bank declines it'],
+  ['hold', 'The bank holds it as pending'],
+  ['drop', 'The connection drops after sending'],
+];
 
 export function review(state) {
   const errs = state.ui.errors;
   const t = state.flow.transfer;
   const p = t.payee;
-  const row = (k, v) => `<div class="kv"><dt>${esc(k)}</dt><dd>${v}</dd></div>`;
-  const behaviours = [
-    ['normal', 'Normal: the bank completes it'],
-    ['decline', 'The bank declines it'],
-    ['hold', 'The bank holds it as pending'],
-    ['drop', 'The connection drops after sending'],
-  ];
+  const biometric = state.auth.method === 'biometric';
+  const busy = state.ui.submitting;
+  const confirmLabel = busy ? 'Processing…' : biometric ? 'Confirm with fingerprint' : 'Confirm transfer';
   return {
     title: 'Review transfer',
     nav: 'pay',
     html: `${h1('Review transfer')}
       ${errorSummary(errs)}
-      <p>Nothing has been sent yet. Check these details, then enter your PIN to confirm.</p>
-      <dl class="summary">
-        ${row('To', `<strong>${esc(p.name)}</strong>`)}
-        ${row('Bank', esc(bankName(p.bankCode)))}
-        ${row('Account', accountEnding(p.accountNumber))}
-        ${row('Amount', money(t.amountKobo))}
-        ${row('Fee', money(t.feeKobo))}
-        ${row('Total debit', `<strong>${money(t.totalKobo)}</strong>`)}
-        ${row('Note', t.note ? esc(t.note) : 'None')}
-      </dl>
-      <div class="actions actions--inline">
-        <button type="button" class="button button--secondary" data-action="edit-amount">Edit amount or note</button>
-        <button type="button" class="button button--secondary" data-action="change-payee">Change recipient</button>
-      </div>
+      <p class="lede" id="review-summary">Send ${money(t.amountKobo)} to <strong>${esc(p.name)}</strong>, ${esc(bankName(p.bankCode))}, ${accountEnding(p.accountNumber)}. Fee ${money(t.feeKobo)}. Total ${money(t.totalKobo)}.${t.note ? ` Note: ${esc(t.note)}.` : ''} Nothing has been sent yet.</p>
       <form data-form="confirm" novalidate>
-        <fieldset class="demo-switch">
-          <legend>Demo bank behaviour</legend>
-          <p class="hint">For judges and testers: choose how the demo bank and network behave for this transfer. A real app has no such choice.</p>
-          ${behaviours.map(([v, label]) => `<div class="radio"><input type="radio" name="behaviour" id="behaviour-${v}" value="${v}"${state.flow.behaviour === v ? ' checked' : ''}><label for="behaviour-${v}">${label}</label></div>`).join('')}
-        </fieldset>
-        <p class="warning" id="pin-privacy">People near you may hear your screen reader. Use headphones if you can. WAYMARK never reads your PIN digits aloud.</p>
-        ${textField({ id: 'pin', label: 'Demo PIN', hint: 'The 4 digits you created at sign-in.', error: errorFor(errs, 'pin'), type: 'password', inputmode: 'numeric', autocomplete: 'off', extra: 'maxlength="4" data-pin-count' })}
-        <button class="button" type="submit" id="confirm-btn" ${state.ui.submitting ? 'disabled aria-disabled="true"' : ''}>${state.ui.submitting ? 'Processing…' : 'Confirm transfer'}</button>
+        ${biometric ? '' : `
+          <p class="hint" id="pin-privacy">Your keyboard may read keys aloud as you touch them. Use headphones if you can.</p>
+          ${textField({ id: 'pin', label: 'Demo PIN', error: errorFor(errs, 'pin'), type: 'password', inputmode: 'numeric', autocomplete: 'off', extra: 'maxlength="4" data-pin-count aria-label="Demo pin"' })}`}
+        <button class="button" type="submit" id="confirm-btn" ${busy ? 'disabled aria-disabled="true"' : ''}>${confirmLabel}</button>
+        <details class="demo-switch">
+          <summary>Demo controls for judges</summary>
+          <fieldset>
+            <legend>Demo bank behaviour</legend>
+            <p class="hint">Choose how the demo bank and network behave for this transfer. A real app has no such choice.</p>
+            ${BEHAVIOURS.map(([v, label]) => `<div class="radio"><input type="radio" name="behaviour" id="behaviour-${v}" value="${v}"${state.flow.behaviour === v ? ' checked' : ''}><label for="behaviour-${v}">${label}</label></div>`).join('')}
+          </fieldset>
+        </details>
       </form>
-      <p><button type="button" class="link" data-action="cancel-transfer">Cancel transfer</button></p>`,
+      <div class="actions actions--inline">
+        <button type="button" class="button button--secondary" data-action="edit-amount">Change amount</button>
+        <button type="button" class="button button--secondary" data-action="change-payee">Change recipient</button>
+        <button type="button" class="button button--secondary" data-action="cancel-transfer">Cancel transfer</button>
+      </div>`,
   };
 }
 
 const OUTCOME_COPY = {
-  completed: { h: 'Transfer completed', p: (t) => `You sent ${formatNaira(t.amountKobo)} to ${t.payee.name}.` },
+  completed: { h: 'Transfer completed', p: (t) => `You sent ${money(t.amountKobo)} to ${esc(t.payee.name)}.` },
   failed: { h: 'Transfer failed', p: () => 'No money left your demo balance.' },
   pending: { h: 'Transfer pending', p: () => 'The bank has not confirmed this transfer yet. Do not send it again.' },
   unknown: { h: 'We could not confirm this transfer yet', p: () => 'Do not send it again. It may already have gone through. Check its status first.' },
@@ -323,7 +320,6 @@ export function outcome(state, operationId) {
   if (t === undefined) return { title: 'Checking transfer', nav: 'pay', html: `${h1('Checking transfer')}<p role="status">Asking the bank for the latest status…</p>` };
   if (!t) return { title: 'Transfer not found', nav: 'pay', html: `${h1('Transfer not found')}<p>The bank has no record of this transfer. It may have been cleared by Reset demo.</p><p><a href="#home">Go to Home</a></p>` };
   const copy = OUTCOME_COPY[t.state];
-  const row = (k, v) => `<div class="kv"><dt>${esc(k)}</dt><dd>${v}</dd></div>`;
   const unresolved = t.state === 'pending' || t.state === 'unknown';
   const failureNote = {
     'insufficient-funds': ' The amount plus fee was more than your demo balance.',
@@ -337,8 +333,8 @@ export function outcome(state, operationId) {
     actions = `<button type="button" class="button" data-action="retry">Try again</button>
       <a class="button button--secondary" href="#home">Go to Home</a>`;
   } else {
-    actions = `<a class="button" href="#activity">View activity</a>
-      <a class="button button--secondary" href="#home">Go to Home</a>`;
+    actions = `<a class="button" href="#home">Go to Home</a>
+      <a class="button button--secondary" href="#activity">View activity</a>`;
   }
   return {
     title: copy.h,
@@ -346,9 +342,10 @@ export function outcome(state, operationId) {
     html: `<div class="outcome outcome--${t.state}">
         <p class="outcome__badge" aria-hidden="true">${esc(STATUS_LABEL[t.state])}</p>
         ${h1(copy.h)}
-        <p class="lede">${esc(copy.p(t) + failureNote)}</p>
+        <p class="lede">${copy.p(t)}${esc(failureNote)}</p>
       </div>
       ${state.ui.flash ? `<p class="warning" role="status">${esc(state.ui.flash)}</p>` : ''}
+      <div class="actions">${actions}</div>
       <dl class="summary">
         ${row('Status', statusTag(t.state))}
         ${row('To', esc(t.payee.name))}
@@ -357,8 +354,7 @@ export function outcome(state, operationId) {
         ${row('Total debit', money(t.totalKobo))}
         ${row('Reference', t.reference ? dual(t.reference, spokenReference(t.reference)) : 'Not known yet')}
         ${state.bankData.account ? row('Demo balance now', money(state.bankData.account.balanceKobo)) : ''}
-      </dl>
-      <div class="actions">${actions}</div>`,
+      </dl>`,
   };
 }
 
@@ -381,6 +377,8 @@ export function help(state) {
     html: `${h1('Help')}
       <section aria-labelledby="h-demo"><h2 id="h-demo">About this demo</h2>
         <p>WAYMARK is a prototype. Every name, account and amount is invented, and no real money moves. ${state.signedIn ? '' : '<a href="#welcome">Back to the start</a>.'}</p></section>
+      <section aria-labelledby="h-approve"><h2 id="h-approve">Approving payments</h2>
+        <p>If you chose your fingerprint, one touch on the sensor approves a payment. Nothing is spoken or typed. If you chose a ${PIN}, your phone's keyboard may read keys aloud as you touch them, so use headphones. In this demo the phone confirms the fingerprint; a real bank would also check it on its own servers.</p></section>
       <section aria-labelledby="h-status"><h2 id="h-status">What each transfer status means</h2>
         <dl class="glossary">
           <dt>Completed</dt><dd>The money has gone. Your balance shows the debit once.</dd>
@@ -391,7 +389,7 @@ export function help(state) {
       <section aria-labelledby="h-pay"><h2 id="h-pay">Paying a new account safely</h2>
         <p>After you type an account number, WAYMARK tells you the account name before you pay. Use Spell name to hear it letter by letter. If the name looks like someone you have saved but the number is different, you will hear a warning.</p></section>
       <section aria-labelledby="h-back"><h2 id="h-back">Going back</h2>
-        <p>Every step has a Back or Cancel transfer button. Until you press Confirm transfer, nothing is sent. Cancelling always tells you that nothing was sent.</p></section>
+        <p>Until you confirm, nothing is sent. Cancel transfer always tells you that nothing was sent.</p></section>
       <section aria-labelledby="h-vib"><h2 id="h-vib">Vibrations</h2>
         <p>On Android phones, the outcome screen vibrates: one short buzz for Completed, two long for Failed, three quick for Pending or Outcome unknown. iPhones do not allow websites to vibrate, so you will hear the heading only. Turn vibrations off in Settings.</p></section>
       <section aria-labelledby="h-support"><h2 id="h-support">Support</h2>
@@ -418,7 +416,7 @@ export function settings(state) {
           <p class="hint" id="haptics-hint">${supported ? 'A different vibration for each outcome. Never the only signal.' : 'This browser cannot vibrate, so this setting has no effect here.'}</p></div>
       </form>
       ${state.signedIn ? `<section aria-labelledby="reset-h" class="danger-zone"><h2 id="reset-h">Reset demo</h2>
-        <p>Restores the starting balance and activity, clears your demo PIN, and returns to the start.</p>
+        <p>Restores the starting balance and activity, removes fingerprint sign-in and your demo ${PIN}, and returns to the start.</p>
         ${state.ui.confirmReset
           ? `<p class="warning" id="reset-confirm" tabindex="-1">Are you sure? This cannot be undone.</p>
              <div class="actions actions--inline"><button type="button" class="button button--danger" data-action="reset-yes">Yes, reset demo</button>

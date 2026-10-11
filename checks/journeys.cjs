@@ -18,6 +18,17 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   const h1 = () => page.locator('h1').innerText();
   const at = (t) => page.waitForFunction((x) => document.querySelector('h1')?.textContent === x, t, { timeout: 10000 }).then(() => true, () => false);
   const live = () => page.locator('#live').innerText();
+  const payTo = async (name) => {
+    await page.getByRole('link', { name: 'Pay', exact: true }).click();
+    await at('Pay someone');
+    await page.getByRole('button', { name: new RegExp(`^Pay ${name}`) }).click();
+    await at(`How much to send to ${name}?`);
+  };
+  const demoBehaviour = async (label) => {
+    const open = await page.locator('details.demo-switch').evaluate((d) => d.open);
+    if (!open) await page.getByText('Demo controls for judges').click();
+    await page.getByLabel(label).check();
+  };
 
   // J1 sign in
   await page.goto(BASE);
@@ -39,9 +50,13 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   check('otp shows number ending', (await page.locator('main').innerText()).includes('ending 4567'));
   await page.getByLabel('Code').fill('123456');
   await page.getByRole('button', { name: 'Continue' }).click();
+  check('approval choice screen', await at('How do you want to approve payments?'));
+  await page.getByRole('link', { name: 'Create a pin' }).click();
+  await at('Create a demo PIN');
+  check('pin field spoken as a word', (await page.locator('#pin1').getAttribute('aria-label')) === 'New demo pin');
   await page.getByLabel('New demo PIN').fill('2580');
   await page.getByLabel('Enter the demo PIN again').fill('2580');
-  await page.getByRole('button', { name: 'Create PIN and sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in' }).click();
 
   // J2 orient
   check('home after sign-in', await at('Home'));
@@ -53,8 +68,8 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await page.screenshot({ path: OUT + '03-home.png', fullPage: true });
 
   // J3 pay a new account, with lookalike warning first
-  await page.getByRole('link', { name: 'Pay someone' }).click();
-  await page.getByRole('link', { name: /New account/ }).click();
+  await page.getByRole('link', { name: 'Pay a new account' }).click();
+  await at('Pay a new account');
   await page.getByLabel('Account number').fill('5009988776');
   await page.getByLabel('Bank').selectOption('KLA');
   await page.getByRole('button', { name: 'Find account' }).click();
@@ -87,7 +102,8 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
 
   // J4 review, PIN, confirm (double click)
   check('review h1', await at('Review transfer'));
-  const reviewText = await page.locator('.summary').textContent();
+  const reviewText = await page.locator('#review-summary').textContent();
+  check('review summary is one sentence with payee', reviewText.includes('Chinedu Eze') && reviewText.includes('Nothing has been sent yet'));
   check('review total spoken', reviewText.includes('5,010 naira'), '');
   check('review account ending spoken', reviewText.includes('account ending 5 4 3 2'));
   await page.screenshot({ path: OUT + '06-review.png', fullPage: true });
@@ -110,16 +126,12 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   const firstItem = await page.locator('.tx').first().textContent();
   check('first item reads in order', /Transfer to Chinedu Eze.*\d{1,2} [A-Z][a-z]+ 2026.*Debit, 5,000 naira.*Completed/s.test(firstItem.replace(/\s+/g, ' ')), firstItem.replace(/\s+/g, ' ').trim());
 
-  // J6 unknown outcome via saved beneficiary
-  await page.getByRole('link', { name: 'Pay', exact: true }).click();
-  await page.getByRole('link', { name: /Saved beneficiary/ }).click();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  check('saved: no selection error', (await page.locator('.error-summary').innerText()).includes('Choose who you want to pay'));
-  await page.getByLabel(/Musa Ibrahim/).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
+  // J6 unknown outcome via a one-tap saved payee
+  await payTo('Musa Ibrahim');
   await page.getByLabel('Amount in naira').fill('1,000');
   await page.getByRole('button', { name: 'Review transfer' }).click();
-  await page.getByLabel('The connection drops after sending').check();
+  await at('Review transfer');
+  await demoBehaviour('The connection drops after sending');
   await page.getByLabel('Demo PIN').fill('2580');
   await page.getByRole('button', { name: 'Confirm transfer' }).click();
   await page.waitForFunction(() => document.querySelector('h1')?.textContent.startsWith('We could not confirm'), null, { timeout: 12000 });
@@ -134,10 +146,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   check('activity 8 items, Musa once', (await page.locator('.tx').count()) === 8 && (await page.locator('.tx', { hasText: 'Transfer to Musa Ibrahim' }).count()) === 2);
 
   // Cancel flow
-  await page.getByRole('link', { name: 'Pay', exact: true }).click();
-  await page.getByRole('link', { name: /Saved beneficiary/ }).click();
-  await page.getByLabel(/Funke Adeyemi/).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await payTo('Funke Adeyemi');
   await page.getByLabel('Amount in naira').fill('200');
   await page.getByRole('button', { name: 'Review transfer' }).click();
   await at('Review transfer');
@@ -146,11 +155,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   check('cancelled says nothing sent', (await page.locator('main').innerText()).includes('Nothing was sent'));
 
   // Cancelling while the fee quote is loading must not jump to Review afterwards
-  await page.getByRole('link', { name: 'Pay', exact: true }).click();
-  await page.getByRole('link', { name: /Saved beneficiary/ }).click();
-  await page.getByLabel(/Funke Adeyemi/).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await at('How much');
+  await payTo('Funke Adeyemi');
   await page.getByLabel('Amount in naira').fill('200');
   await page.evaluate(() => {
     document.querySelector('form[data-form="amount"]').requestSubmit();
@@ -160,28 +165,26 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   check('late quote ignored after cancel', (await h1()) === 'Transfer cancelled', await h1());
 
   // Failed + retry keeps details
-  await page.getByRole('link', { name: 'Pay', exact: true }).click();
-  await page.getByRole('link', { name: /Saved beneficiary/ }).click();
-  await page.getByLabel(/Funke Adeyemi/).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await payTo('Funke Adeyemi');
   await page.getByLabel('Amount in naira').fill('300');
   await page.getByRole('button', { name: 'Review transfer' }).click();
-  await page.getByLabel('The bank declines it').check();
+  await at('Review transfer');
+  await demoBehaviour('The bank declines it');
   await page.getByLabel('Demo PIN').fill('2580');
   await page.getByRole('button', { name: 'Confirm transfer' }).click();
   await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Transfer failed', null, { timeout: 12000 });
   await page.getByRole('button', { name: 'Try again' }).click();
-  check('retry returns to review with same amount', (await at('Review transfer')) && (await page.locator('.summary').textContent()).includes('300 naira'));
+  check('retry returns to review with same amount', (await at('Review transfer')) && (await page.locator('#review-summary').textContent()).includes('300 naira'));
 
-  // Pending: bank holds it, status check completes it
-  await page.getByRole('link', { name: 'Pay', exact: true }).click();
-  await page.getByRole('link', { name: /Saved beneficiary/ }).click();
-  await page.getByLabel(/Adaeze Okafor/).check();
-  await page.getByRole('button', { name: 'Continue' }).click();
+  // Pending: bank holds it, status check completes it. Starts from the Home "Pay again" button.
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
+  await at('Home');
+  await page.getByRole('button', { name: /^Pay Adaeze Okafor/ }).click();
+  check('home one-tap pay', await at('How much to send to Adaeze Okafor?'));
   await page.getByLabel('Amount in naira').fill('750');
   await page.getByRole('button', { name: 'Review transfer' }).click();
   await at('Review transfer');
-  await page.getByLabel('The bank holds it as pending').check();
+  await demoBehaviour('The bank holds it as pending');
   await page.getByLabel('Demo PIN').fill('2580');
   await page.getByRole('button', { name: 'Confirm transfer' }).click();
   check('hold shows pending', await at('Transfer pending'));
@@ -214,6 +217,49 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await page.reload();
   check('refresh requires sign-in', (await h1()) === 'WAYMARK');
   check('no JS errors', errors.length === 0, errors.join(' || '));
+
+  // Fingerprint journey, with Chrome's virtual authenticator standing in for the sensor
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const fp = await ctx.newPage();
+  fp.on('pageerror', (e) => errors.push(String(e)));
+  const cdp = await ctx.newCDPSession(fp);
+  await cdp.send('WebAuthn.enable');
+  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
+    protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+    isUserVerified: true, automaticPresenceSimulation: true } });
+  const fpAt = (t) => fp.waitForFunction((x) => document.querySelector('h1')?.textContent === x, t, { timeout: 10000 }).then(() => true, () => false);
+  await fp.goto(BASE);
+  await fp.getByRole('link', { name: 'Start the demo' }).click();
+  await fp.getByLabel('Mobile number').fill('08031234567');
+  await fp.getByRole('button', { name: 'Continue' }).click();
+  await fp.getByLabel('Code').fill('123456');
+  await fp.getByRole('button', { name: 'Continue' }).click();
+  await fpAt('How do you want to approve payments?');
+  await fp.screenshot({ path: OUT + '12-approve-choice.png', fullPage: true });
+  await fp.getByRole('button', { name: 'Use my fingerprint' }).click();
+  check('fingerprint set-up signs in', await fpAt('Home'));
+  check('fingerprint flash', (await fp.locator('.flash').innerText()).includes('fingerprint'));
+  await fp.getByRole('button', { name: /^Pay Musa Ibrahim/ }).click();
+  await fpAt('How much to send to Musa Ibrahim?');
+  await fp.getByLabel('Amount in naira').fill('500');
+  await fp.getByRole('button', { name: 'Review transfer' }).click();
+  await fpAt('Review transfer');
+  check('fingerprint review has no PIN field', (await fp.locator('#pin').count()) === 0);
+  await fp.screenshot({ path: OUT + '13-review-fingerprint.png', fullPage: true });
+  await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false });
+  await fp.getByRole('button', { name: 'Confirm with fingerprint' }).click();
+  await fp.waitForSelector('.error-summary', { timeout: 10000 }).catch(() => {});
+  check('failed fingerprint sends nothing', (await fp.locator('h1').innerText()) === 'Review transfer'
+    && (await fp.locator('.error-summary').innerText()).includes('Nothing was sent'));
+  await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: true });
+  await fp.getByRole('button', { name: 'Confirm with fingerprint' }).click();
+  check('fingerprint approves transfer', await fpAt('Transfer completed'));
+  await fp.reload();
+  await fpAt('WAYMARK');
+  await fp.getByRole('button', { name: 'Sign in with fingerprint' }).click();
+  check('one-touch sign-in on return', await fpAt('Home'));
+  await ctx.close();
+  check('no JS errors in fingerprint journey', errors.length === 0, errors.join(' || '));
 
   console.log(results.join('\n'));
   if (results.some((r) => r.startsWith('FAIL'))) process.exitCode = 1;

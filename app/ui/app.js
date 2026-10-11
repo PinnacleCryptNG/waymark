@@ -16,7 +16,8 @@ import { FEE_KOBO } from '../domain/money.js';
 import { DEMO_OTP } from '../data/seed.js';
 import * as screens from './screens.js';
 import { announce, focusElement } from './dom.js';
-import { prefsStore, bankStorage, DEFAULT_PREFS } from './store.js';
+import { prefsStore, bankStorage, credentialStore, DEFAULT_PREFS } from './store.js';
+import { biometricAvailable, registerBiometric, verifyBiometric } from './biometric.js';
 import { playOutcome } from './haptics.js';
 
 const bank = assertBank(createDemoBank({ storage: bankStorage }));
@@ -32,6 +33,8 @@ const state = {
   lookup: freshLookup(),
   flow: freshFlow(),
   attempts: {}, // transfer attempts as this device knows them, by transfer id
+  auth: { method: null }, // 'biometric' or 'pin', chosen at sign-in
+  biometric: { available: false, credentialId: credentialStore.load() },
   bankData: { account: null, activity: [], beneficiaries: [] },
   ui: { errors: null, focus: null, submitting: false, checking: false, flash: '', confirmReset: false, loadingAttempt: false },
 };
@@ -45,19 +48,19 @@ async function refreshBankData() {
 
 // ---------- Routing ----------
 
-const PUBLIC = new Set(['welcome', 'signin', 'otp', 'create-pin', 'help', 'settings']);
+const PUBLIC = new Set(['welcome', 'signin', 'otp', 'secure', 'create-pin', 'help', 'settings']);
 
 const SCREENS = {
   welcome: screens.welcome,
   signin: screens.signin,
   otp: screens.otp,
+  secure: screens.secure,
   'create-pin': screens.createPin,
   home: screens.home,
   activity: screens.activityList,
   tx: screens.txDetail,
   pay: screens.pay,
   'pay-new': screens.payNew,
-  'pay-saved': screens.paySaved,
   amount: screens.amount,
   review: screens.review,
   outcome: screens.outcome,
@@ -75,9 +78,9 @@ function parseRoute() {
 function guard({ name }) {
   if (!name) return state.signedIn ? 'home' : 'welcome';
   if (!state.signedIn && !PUBLIC.has(name)) return 'welcome';
-  if (state.signedIn && ['welcome', 'signin', 'otp', 'create-pin'].includes(name)) return 'home';
+  if (state.signedIn && ['welcome', 'signin', 'otp', 'secure', 'create-pin'].includes(name)) return 'home';
   if (name === 'otp' && !state.form.phoneOk) return 'signin';
-  if (name === 'create-pin' && !state.form.otpOk) return 'signin';
+  if ((name === 'secure' || name === 'create-pin') && !state.form.otpOk) return 'signin';
   if (name === 'amount' && !state.flow.payee) return 'pay';
   if (name === 'review' && !state.flow.transfer) return state.flow.payee ? 'amount' : 'pay';
   return null;
@@ -149,6 +152,29 @@ const val = (id) => document.getElementById(id)?.value ?? '';
 const showErrors = (errors) => { state.ui.errors = errors; rerender('errors'); };
 const resetFlow = () => { state.flow = freshFlow(); state.lookup = freshLookup(); };
 
+/** Load the account from the bank and land on Home. Returns false if the bank cannot be reached. */
+async function finishSignIn(method) {
+  try {
+    await refreshBankData();
+  } catch {
+    return false;
+  }
+  state.auth = { method };
+  state.signedIn = true;
+  state.form = {};
+  state.ui.flash = method === 'biometric'
+    ? 'You are signed in. Payments are approved with your fingerprint.'
+    : 'You are signed in to the demo.';
+  go('home');
+  return true;
+}
+
+const BIO_MESSAGES = {
+  cancelled: 'Fingerprint not confirmed. Try again.',
+  'already-registered': 'This phone already has a fingerprint set up for the demo. Try again.',
+  unavailable: 'Fingerprint is not available in this browser. Use a pin instead.',
+};
+
 function setBusy(button, text) {
   if (!button) return;
   button.disabled = true;
@@ -211,7 +237,7 @@ const FORMS = {
     if (!digits) return showErrors([{ field: 'otp', message: MESSAGES.otpBlank }]);
     if (digits !== DEMO_OTP) return showErrors([{ field: 'otp', message: MESSAGES.otpWrong }]);
     state.form.otpOk = true;
-    go('create-pin');
+    go('secure');
   },
 
   async 'create-pin'(form) {
@@ -223,17 +249,11 @@ const FORMS = {
     if (errors.length) return showErrors(errors);
     const button = form.querySelector('button[type="submit"]');
     setBusy(button, 'Signing in…');
-    try {
-      await refreshBankData();
-    } catch {
-      restore(button, 'Create PIN and sign in');
-      return showErrors([{ field: 'pin1', message: MESSAGES.network }]);
-    }
     state.pin = pin1;
-    state.signedIn = true;
-    state.form = {};
-    state.ui.flash = 'You are signed in to the demo.';
-    go('home');
+    if (!await finishSignIn('pin')) {
+      restore(button, 'Sign in');
+      showErrors([{ field: 'pin1', message: MESSAGES.network }]);
+    }
   },
 
   async lookup(form) {
@@ -270,13 +290,6 @@ const FORMS = {
     rerender('#lookup-result');
   },
 
-  saved() {
-    const id = document.querySelector('input[name="payee"]:checked')?.value;
-    if (!id) return showErrors([{ field: 'payee', message: MESSAGES.payeeBlank }]);
-    state.flow.payee = { ...state.bankData.beneficiaries.find((b) => b.id === id) };
-    go('amount');
-  },
-
   async amount(form) {
     const { flow } = state;
     flow.amountText = val('amount');
@@ -300,11 +313,24 @@ const FORMS = {
     if (state.ui.submitting) return; // a second tap while processing does nothing
     const { flow } = state;
     flow.behaviour = document.querySelector('input[name="behaviour"]:checked')?.value ?? BEHAVIOURS.NORMAL;
-    if (val('pin') !== state.pin) return showErrors([{ field: 'pin', message: MESSAGES.pinWrong }]);
+    const button = document.getElementById('confirm-btn');
+
+    if (state.auth.method === 'biometric') {
+      state.ui.submitting = true;
+      setBusy(button, 'Waiting for fingerprint…');
+      announce('Touch the fingerprint sensor to approve.');
+      const approved = await verifyBiometric(state.biometric.credentialId);
+      if (!approved.ok) {
+        state.ui.submitting = false;
+        return showErrors([{ field: 'confirm-btn', message: `${BIO_MESSAGES[approved.reason] ?? BIO_MESSAGES.cancelled} Nothing was sent.` }]);
+      }
+    } else if (val('pin') !== state.pin) {
+      return showErrors([{ field: 'pin', message: MESSAGES.pinWrong }]);
+    }
 
     state.ui.submitting = true;
-    setBusy(document.getElementById('confirm-btn'), 'Processing…');
-    announce('Sending your transfer to the bank. Please wait.');
+    setBusy(button, 'Processing…');
+    announce('Approved. Sending your transfer to the bank. Please wait.');
 
     bank.setBehaviour(flow.behaviour);
     const processing = transition(flow.transfer, STATES.PROCESSING);
@@ -333,6 +359,36 @@ const ACTIONS = {
   'focus-field'(el) {
     const field = document.getElementById(el.dataset.field);
     if (field) { field.focus(); field.scrollIntoView({ block: 'center' }); }
+  },
+
+  async 'setup-biometric'(el) {
+    setBusy(el, 'Waiting for fingerprint…');
+    announce('Touch the fingerprint sensor.');
+    const result = await registerBiometric();
+    if (!result.ok) {
+      return showErrors([{ field: 'bio-setup', message: BIO_MESSAGES[result.reason] ?? BIO_MESSAGES.unavailable }]);
+    }
+    credentialStore.save(result.credentialId);
+    state.biometric.credentialId = result.credentialId;
+    if (!await finishSignIn('biometric')) showErrors([{ field: 'bio-setup', message: MESSAGES.network }]);
+  },
+
+  async 'biometric-signin'(el) {
+    setBusy(el, 'Waiting for fingerprint…');
+    announce('Touch the fingerprint sensor to sign in.');
+    const result = await verifyBiometric(state.biometric.credentialId);
+    if (!result.ok) {
+      return showErrors([{ field: 'bio-signin', message: BIO_MESSAGES[result.reason] ?? BIO_MESSAGES.cancelled }]);
+    }
+    if (!await finishSignIn('biometric')) showErrors([{ field: 'bio-signin', message: MESSAGES.network }]);
+  },
+
+  'pay-to'(el) {
+    const payee = state.bankData.beneficiaries.find((b) => b.id === el.dataset.id);
+    if (!payee) return;
+    resetFlow();
+    state.flow.payee = { ...payee };
+    go('amount');
   },
 
   'confirm-payee'() {
@@ -415,6 +471,9 @@ const ACTIONS = {
     prefsStore.save(state.prefs);
     state.signedIn = false;
     state.pin = null;
+    state.auth = { method: null };
+    credentialStore.clear();
+    state.biometric.credentialId = null;
     state.form = {};
     state.attempts = {};
     state.bankData = { account: null, activity: [], beneficiaries: [] };
@@ -478,6 +537,7 @@ main.addEventListener('change', (e) => {
 // ---------- Start ----------
 
 applyPrefs();
+state.biometric.available = await biometricAvailable();
 if (!location.hash) history.replaceState(null, '', '#welcome');
 render();
 
