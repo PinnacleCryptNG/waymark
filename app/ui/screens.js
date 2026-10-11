@@ -12,6 +12,7 @@ import {
 import { STATUS_LABEL } from '../domain/transfer.js';
 import { BANKS, bankName, DEMO_OTP } from '../data/seed.js';
 import { hapticsSupported } from './haptics.js';
+import { EXAMPLES } from '../voice/dialog.js';
 
 const h1 = (text) => `<h1 id="page-title" tabindex="-1">${esc(text)}</h1>`;
 const h1Html = (html) => `<h1 id="page-title" tabindex="-1">${html}</h1>`;
@@ -140,6 +141,7 @@ export function home(state) {
     nav: 'home',
     html: `${h1('Home')}
       ${state.ui.flash ? `<p class="flash" role="status">${esc(state.ui.flash)}</p>` : ''}
+      <div class="actions"><a class="button button--talk" href="#voice">Talk to WAYMARK</a></div>
       <section class="balance" aria-labelledby="bal-h">
         <h2 id="bal-h">Balance</h2>
         <p class="balance__amount"><span class="sr-only">Demo balance, </span>${money(state.bankData.account.balanceKobo)}</p>
@@ -368,6 +370,37 @@ export function cancelled() {
   };
 }
 
+// ---------- Voice ----------
+
+const voiceLogItem = (entry) =>
+  `<li class="voice-log__item voice-log__item--${entry.who}"><span class="voice-log__who">${entry.who === 'you' ? 'You said:' : 'WAYMARK:'}</span> ${esc(entry.text)}</li>`;
+
+export const voiceLogHtml = (log) =>
+  log.length ? log.map(voiceLogItem).join('') : '<li class="muted">Nothing yet.</li>';
+
+export function voice(state) {
+  const errs = state.ui.errors;
+  return {
+    title: 'Talk to WAYMARK',
+    nav: 'voice',
+    html: `${h1('Talk to WAYMARK')}
+      ${state.voiceSupported
+        ? `<p>Double-tap Start talking. After the tone, say what you want.</p>
+           <button type="button" class="button button--talk" id="voice-btn" data-action="voice-start">Start talking</button>`
+        : '<p>Voice input is not available in this browser. Use Chrome on Android, or type a command below.</p>'}
+      <p class="hint">${esc(EXAMPLES)}</p>
+      <section aria-labelledby="conv-h">
+        <h2 id="conv-h">Conversation</h2>
+        <ol class="voice-log" id="voice-log">${voiceLogHtml(state.voice.log)}</ol>
+      </section>
+      <form data-form="voice-text" novalidate>
+        ${textField({ id: 'voice-input', label: 'Type a command', error: errorFor(errs, 'voice-input'), required: false })}
+        <button class="button button--secondary" type="submit">Send command</button>
+      </form>
+      <p class="hint">Voice can prepare a payment but never send one. You always confirm with your fingerprint or ${PIN}.</p>`,
+  };
+}
+
 // ---------- Help and settings ----------
 
 export function help(state) {
@@ -379,6 +412,8 @@ export function help(state) {
         <p>WAYMARK is a prototype. Every name, account and amount is invented, and no real money moves. ${state.signedIn ? '' : '<a href="#welcome">Back to the start</a>.'}</p></section>
       <section aria-labelledby="h-approve"><h2 id="h-approve">Approving payments</h2>
         <p>If you chose your fingerprint, one touch on the sensor approves a payment. Nothing is spoken or typed. If you chose a ${PIN}, your phone's keyboard may read keys aloud as you touch them, so use headphones. In this demo the phone confirms the fingerprint; a real bank would also check it on its own servers.</p></section>
+      <section aria-labelledby="h-voice"><h2 id="h-voice">Talking to WAYMARK</h2>
+        <p>On Home, choose Talk to WAYMARK, then Start talking. A rising tone means it is listening; a falling tone means it has stopped. ${esc(EXAMPLES)} Voice payments are limited to 50,000 naira and always need your fingerprint or ${PIN} to send. In Chrome, your speech is sent to Google to turn it into text, so do not say anything private you would not say aloud.</p></section>
       <section aria-labelledby="h-status"><h2 id="h-status">What each transfer status means</h2>
         <dl class="glossary">
           <dt>Completed</dt><dd>The money has gone. Your balance shows the debit once.</dd>
@@ -412,6 +447,8 @@ export function settings(state) {
         </fieldset>
         <div class="check"><input type="checkbox" id="highContrast" name="highContrast"${p.highContrast ? ' checked' : ''}><label for="highContrast">High contrast</label></div>
         <div class="check"><input type="checkbox" id="reducedMotion" name="reducedMotion"${p.reducedMotion ? ' checked' : ''}><label for="reducedMotion">Reduce motion</label></div>
+        <div class="check"><input type="checkbox" id="speakReplies" name="speakReplies" aria-describedby="speak-hint"${p.speakReplies ? ' checked' : ''}><label for="speakReplies">Speak voice replies aloud</label>
+          <p class="hint" id="speak-hint">For people not using a screen reader. If your screen reader is on, leave this off so you do not hear replies twice.</p></div>
         <div class="check"><input type="checkbox" id="haptics" name="haptics" aria-describedby="haptics-hint"${p.haptics ? ' checked' : ''}><label for="haptics">Vibrate on transfer outcome</label>
           <p class="hint" id="haptics-hint">${supported ? 'A different vibration for each outcome. Never the only signal.' : 'This browser cannot vibrate, so this setting has no effect here.'}</p></div>
       </form>

@@ -261,6 +261,84 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await ctx.close();
   check('no JS errors in fingerprint journey', errors.length === 0, errors.join(' || '));
 
+  // Voice journey: a fake recogniser stands in for the microphone and "hears" a fixed sentence.
+  const vctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await vctx.addInitScript(() => {
+    window.__heard = 'send 500 naira to Musa';
+    // Chrome exposes both names; replace both so the stand-in is used.
+    window.SpeechRecognition = window.webkitSpeechRecognition = class {
+      start() { setTimeout(() => this.onresult?.({ results: [[{ transcript: window.__heard }]] }), 150); setTimeout(() => this.onend?.(), 200); }
+      stop() {}
+      abort() {}
+    };
+  });
+  const vp = await vctx.newPage();
+  vp.on('pageerror', (e) => errors.push(String(e)));
+  const vcdp = await vctx.newCDPSession(vp);
+  await vcdp.send('WebAuthn.enable');
+  await vcdp.send('WebAuthn.addVirtualAuthenticator', { options: {
+    protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+    isUserVerified: true, automaticPresenceSimulation: true } });
+  const vAt = (t) => vp.waitForFunction((x) => document.querySelector('h1')?.textContent === x, t, { timeout: 10000 }).then(() => true, () => false);
+  const vFocused = () => vp.evaluate(() => document.activeElement?.id || document.activeElement?.tagName);
+  const vLog = () => vp.locator('#voice-log').innerText();
+  await vp.goto(BASE);
+  await vp.getByRole('link', { name: 'Start the demo' }).click();
+  await vp.getByLabel('Mobile number').fill('08031234567');
+  await vp.getByRole('button', { name: 'Continue' }).click();
+  await vp.getByLabel('Code').fill('123456');
+  await vp.getByRole('button', { name: 'Continue' }).click();
+  await vAt('How do you want to approve payments?');
+  await vp.getByRole('button', { name: 'Use my fingerprint' }).click();
+  await vAt('Home');
+  await vp.getByRole('link', { name: 'Talk to WAYMARK' }).click();
+  check('voice screen opens', await vAt('Talk to WAYMARK'));
+
+  // Typed commands use the same conversation as speech.
+  await vp.getByLabel('Type a command').fill('what is my balance');
+  await vp.getByRole('button', { name: 'Send command' }).click();
+  await vp.waitForFunction(() => document.getElementById('voice-log').innerText.includes('balance is'));
+  check('voice: balance answered in words', (await vLog()).includes('Your demo balance is 245,800 naira.'));
+  await vp.waitForTimeout(150);
+  check('voice: reply announced to screen reader', (await vp.locator('#live').innerText()).includes('245,800 naira'));
+
+  // New account by voice: name read back, only "yes" continues.
+  await vp.getByLabel('Type a command').fill('pay 0198765432 at Lagoon bank 2000 naira');
+  await vp.getByRole('button', { name: 'Send command' }).click();
+  await vp.waitForFunction(() => document.getElementById('voice-log').innerText.includes('Say yes or no'), null, { timeout: 5000 });
+  check('voice: account owner read back', (await vLog()).includes('That account belongs to Chinedu Eze'));
+  await vp.getByLabel('Type a command').fill('no');
+  await vp.getByRole('button', { name: 'Send command' }).click();
+  await vp.waitForFunction(() => document.getElementById('voice-log').innerText.includes('Nothing was sent'));
+  check('voice: no cancels', (await vLog()).includes('Okay, cancelled. Nothing was sent.'));
+
+  // Lookalike by voice.
+  await vp.getByLabel('Type a command').fill('send 1000 to 5009988776 kola microfinance');
+  await vp.getByRole('button', { name: 'Send command' }).click();
+  await vp.waitForFunction(() => document.getElementById('voice-log').innerText.includes('Careful'), null, { timeout: 5000 });
+  check('voice: lookalike warning spoken', (await vLog()).includes('Careful. This is not your saved Adaeze Okafor'));
+  await vp.getByLabel('Type a command').fill('no');
+  await vp.getByRole('button', { name: 'Send command' }).click();
+
+  // Over the voice limit.
+  await vp.getByLabel('Type a command').fill('send 60000 to Musa');
+  await vp.getByRole('button', { name: 'Send command' }).click();
+  await vp.waitForFunction(() => document.getElementById('voice-log').innerText.includes('limited to'));
+  check('voice: limit enforced', (await vLog()).includes('Voice payments are limited to 50,000 naira'));
+
+  // Spoken command via the Start talking button, then fingerprint: the 3-action payment.
+  await vp.screenshot({ path: OUT + '14-voice.png', fullPage: true });
+  await vp.getByRole('button', { name: 'Start talking' }).click();
+  check('voice: spoken command opens Review', await vAt('Review transfer'));
+  check('voice: focus lands on the payment summary', (await vFocused()) === 'review-summary', await vFocused());
+  check('voice: summary has payee and amount', (await vp.locator('#review-summary').textContent()).includes('Musa Ibrahim')
+    && (await vp.locator('#review-summary').textContent()).includes('500 naira'));
+  await vp.screenshot({ path: OUT + '15-voice-review.png', fullPage: true });
+  await vp.getByRole('button', { name: 'Confirm with fingerprint' }).click();
+  check('voice: fingerprint completes the payment', await vAt('Transfer completed'));
+  await vctx.close();
+  check('no JS errors in voice journey', errors.length === 0, errors.join(' || '));
+
   console.log(results.join('\n'));
   if (results.some((r) => r.startsWith('FAIL'))) process.exitCode = 1;
   await browser.close();

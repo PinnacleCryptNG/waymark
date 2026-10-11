@@ -5,7 +5,7 @@
 const PREFS_KEY = 'waymark.prefs.v1';
 const BANK_KEY = 'waymark.demobank.v1';
 
-export const DEFAULT_PREFS = { textSize: 'standard', highContrast: false, reducedMotion: false, haptics: true };
+export const DEFAULT_PREFS = { textSize: 'standard', highContrast: false, reducedMotion: false, haptics: true, speakReplies: false };
 
 function read(key) {
   try {

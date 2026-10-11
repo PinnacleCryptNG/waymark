@@ -12,15 +12,19 @@ import {
   MESSAGES, validateAmount, validateAccountNumber, normaliseDigits, validatePinFormat, validateNote,
   validatePhone, amountOverBalance,
 } from '../domain/validation.js';
-import { FEE_KOBO } from '../domain/money.js';
-import { DEMO_OTP } from '../data/seed.js';
+import { FEE_KOBO, koboToInputText } from '../domain/money.js';
+import { DEMO_OTP, BANKS } from '../data/seed.js';
 import * as screens from './screens.js';
 import { announce, focusElement } from './dom.js';
 import { prefsStore, bankStorage, credentialStore, DEFAULT_PREFS } from './store.js';
 import { biometricAvailable, registerBiometric, verifyBiometric } from './biometric.js';
+import { createRuleInterpreter } from '../voice/interpreter.js';
+import { respond, afterLookup, newDialog } from '../voice/dialog.js';
+import { recognitionSupported, listenOnce, speakAloud, tone, RECOGNITION_MESSAGES } from '../voice/speech.js';
 import { playOutcome } from './haptics.js';
 
 const bank = assertBank(createDemoBank({ storage: bankStorage }));
+const interpreter = createRuleInterpreter(); // the slot a Claude-backed reader will fill
 
 const freshLookup = () => ({ accountText: '', bankCode: '', result: null, lookalike: null, loading: false, spelled: '' });
 const freshFlow = () => ({ payee: null, amountText: '', note: '', transfer: null, behaviour: BEHAVIOURS.NORMAL });
@@ -35,6 +39,8 @@ const state = {
   attempts: {}, // transfer attempts as this device knows them, by transfer id
   auth: { method: null }, // 'biometric' or 'pin', chosen at sign-in
   biometric: { available: false, credentialId: credentialStore.load() },
+  voiceSupported: recognitionSupported(),
+  voice: { dialog: newDialog(), log: [], busy: false },
   bankData: { account: null, activity: [], beneficiaries: [] },
   ui: { errors: null, focus: null, submitting: false, checking: false, flash: '', confirmReset: false, loadingAttempt: false },
 };
@@ -63,6 +69,7 @@ const SCREENS = {
   'pay-new': screens.payNew,
   amount: screens.amount,
   review: screens.review,
+  voice: screens.voice,
   outcome: screens.outcome,
   cancelled: screens.cancelled,
   help: screens.help,
@@ -212,6 +219,76 @@ async function startReview() {
   return null;
 }
 
+// ---------- Voice ----------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Add a line to the conversation without re-rendering, so focus stays where the user is. */
+function voiceLog(who, text) {
+  state.voice.log.push({ who, text });
+  const list = document.getElementById('voice-log');
+  if (list) list.innerHTML = screens.voiceLogHtml(state.voice.log);
+}
+
+/** WAYMARK's reply: shown, announced to the screen reader, and spoken aloud if the user chose that. */
+function voiceReply(text, { announceIt = true } = {}) {
+  voiceLog('waymark', text);
+  if (announceIt) announce(text);
+  if (state.prefs.speakReplies) speakAloud(text);
+}
+
+const voiceContext = () => ({
+  beneficiaries: state.bankData.beneficiaries,
+  banks: BANKS,
+  balanceKobo: state.bankData.account.balanceKobo,
+  activity: state.bankData.activity,
+});
+
+async function handleUtterance(text) {
+  const said = String(text ?? '').trim();
+  if (!said || state.voice.busy) return;
+  state.voice.busy = true;
+  voiceLog('you', said);
+  try {
+    const ctx = voiceContext();
+    const intent = await interpreter.interpret(said, ctx);
+    let result = respond(state.voice.dialog, intent, ctx);
+    state.voice.dialog = result.dialog;
+
+    if (result.action?.type === 'lookup') {
+      voiceReply(result.reply);
+      const { accountNumber, bankCode, amountKobo } = result.action;
+      let found;
+      try {
+        found = await bank.lookupName({ bankCode, accountNumber });
+      } catch {
+        voiceReply(MESSAGES.network);
+        return;
+      }
+      const lookalike = found.ok ? findLookalike(ctx.beneficiaries, found) : null;
+      result = afterLookup(found, lookalike, amountKobo, ctx);
+      state.voice.dialog = result.dialog;
+    }
+
+    if (result.action?.type === 'review') {
+      // Hand over to the normal Review screen. Its summary sentence gets focus, so the screen
+      // reader reads the whole payment at once; the next swipe is the confirm button.
+      const { payee, amountKobo } = result.action;
+      voiceReply(result.reply, { announceIt: false });
+      resetFlow();
+      state.flow.payee = { ...payee };
+      state.flow.amountText = koboToInputText(amountKobo);
+      state.ui.focus = '#review-summary';
+      const error = await startReview();
+      if (error) { state.ui.focus = null; voiceReply(error); }
+      return;
+    }
+    voiceReply(result.reply);
+  } finally {
+    state.voice.busy = false;
+  }
+}
+
 function applyPrefs() {
   const root = document.documentElement;
   root.dataset.textSize = state.prefs.textSize;
@@ -288,6 +365,13 @@ const FORMS = {
     L.lookalike = findLookalike(state.bankData.beneficiaries, L.result);
     state.ui.errors = null;
     rerender('#lookup-result');
+  },
+
+  'voice-text'() {
+    const input = document.getElementById('voice-input');
+    const text = input.value;
+    input.value = '';
+    handleUtterance(text);
   },
 
   async amount(form) {
@@ -391,6 +475,21 @@ const ACTIONS = {
     go('amount');
   },
 
+  async 'voice-start'(el) {
+    if (state.voice.busy) return;
+    if (!state.voiceSupported) { voiceReply(RECOGNITION_MESSAGES.unsupported); return; }
+    setBusy(el, 'Listening…');
+    // Let the screen reader finish speaking first, so it is not heard as the command.
+    await sleep(450);
+    tone('start');
+    try { navigator.vibrate?.(40); } catch { /* optional */ }
+    const heard = await listenOnce();
+    tone(heard.ok ? 'stop' : 'error');
+    restore(el, 'Start talking');
+    if (!heard.ok) { voiceReply(RECOGNITION_MESSAGES[heard.reason] ?? "I didn't catch that. Try again, or type instead."); return; }
+    await handleUtterance(heard.transcript);
+  },
+
   'confirm-payee'() {
     const { result } = state.lookup;
     state.flow.payee = { id: null, ...result };
@@ -476,6 +575,7 @@ const ACTIONS = {
     state.biometric.credentialId = null;
     state.form = {};
     state.attempts = {};
+    state.voice = { dialog: newDialog(), log: [], busy: false };
     state.bankData = { account: null, activity: [], beneficiaries: [] };
     state.ui.confirmReset = false;
     resetFlow();

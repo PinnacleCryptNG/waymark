@@ -62,6 +62,11 @@ const BASE = process.env.BASE_URL || 'http://localhost:8080/';
     await page.getByLabel('Demo PIN').fill('2580');
     await page.getByRole('button', { name: 'Confirm transfer' }).click(); await at('We could not');
     await scan(`${mode}/outcome-unknown`);
+    await page.goto(BASE + '#voice'); await at('Talk to WAYMARK');
+    await page.getByLabel('Type a command').fill('what is my balance');
+    await page.getByRole('button', { name: 'Send command' }).click();
+    await page.waitForFunction(() => document.getElementById('voice-log').innerText.includes('balance is'));
+    await scan(`${mode}/voice`);
     await page.goto(BASE + '#help'); await at('Help'); await scan(`${mode}/help`);
     await page.goto(BASE + '#settings'); await at('Settings'); await scan(`${mode}/settings`);
   }
