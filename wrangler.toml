@@ -1,0 +1,11 @@
+# Cloudflare Worker that holds the Gemini key (see docs/AI-SETUP.md). Cloudflare builds this
+# from the repository root, so the config lives here. The app itself is on GitHub Pages.
+name = "waymark-interpreter"
+main = "server/gemini-worker.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://pinnaclecryptng.github.io,http://localhost:8080"
+# GEMINI_MODEL = "gemini-flash-lite-latest"
+
+# The key is a secret, set in the Cloudflare dashboard, never written here.
