@@ -1,5 +1,5 @@
-// Offline support: cache the static files, serve from cache, refresh the cache in the background.
-const CACHE = 'waymark-v6';
+// Offline support: always fetch the latest files when online, keep a copy for when offline.
+const CACHE = 'waymark-v7';
 const FILES = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './ui/app.js', './ui/screens.js', './ui/dom.js', './ui/store.js', './ui/haptics.js', './ui/biometric.js',
@@ -19,13 +19,16 @@ self.addEventListener('activate', (e) => {
     .then(() => self.clients.claim()));
 });
 
+// Network first, so a new version shows at once; the saved copy is used only when offline.
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(caches.open(CACHE).then(async (cache) => {
-    const cached = await cache.match(e.request, { ignoreSearch: true });
-    const network = fetch(e.request)
-      .then((res) => { if (res.ok) cache.put(e.request, res.clone()); return res; })
-      .catch(() => cached);
-    return cached ?? network;
+    try {
+      const res = await fetch(e.request, { cache: 'no-cache' });
+      if (res.ok) cache.put(e.request, res.clone());
+      return res;
+    } catch {
+      return (await cache.match(e.request, { ignoreSearch: true })) ?? Response.error();
+    }
   }));
 });

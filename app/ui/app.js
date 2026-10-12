@@ -28,7 +28,21 @@ import { playOutcome } from './haptics.js';
 
 const bank = assertBank(createDemoBank({ storage: bankStorage }));
 // Gemini reads what was said when its server is set up (config.js); otherwise the built-in rules do.
-const interpreter = AI_ENDPOINT ? createGeminiInterpreter({ endpoint: AI_ENDPOINT }) : createRuleInterpreter();
+const reader = AI_ENDPOINT ? createGeminiInterpreter({ endpoint: AI_ENDPOINT }) : createRuleInterpreter();
+// Note on the conversation which reader understood each sentence, so it is easy to see Gemini at work.
+const interpreter = {
+  name: reader.name,
+  async interpret(text, ctx) {
+    const intent = await reader.interpret(text, ctx);
+    const last = [...state.voice.log].reverse().find((e) => e.who === 'you');
+    if (AI_ENDPOINT && last && intent.via) {
+      last.via = intent.via;
+      const list = document.getElementById('voice-log');
+      if (list) list.innerHTML = screens.voiceLogHtml(state.voice.log);
+    }
+    return intent;
+  },
+};
 
 const freshLookup = () => ({ accountText: '', bankCode: '', result: null, lookalike: null, loading: false, spelled: '' });
 const freshFlow = () => ({ payee: null, amountText: '', note: '', transfer: null, behaviour: BEHAVIOURS.NORMAL });

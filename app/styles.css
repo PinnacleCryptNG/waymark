@@ -312,3 +312,4 @@ details.demo-switch fieldset { border: 0; padding: 0; margin: 0.5rem 0 0; }
 .talk-more summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
 .talk-more form { margin-top: 1rem; }
 html[data-contrast="high"] .talk-target { border: 3px solid var(--accent-ink); }
+.voice-log__via { color: var(--muted); font-size: 0.875rem; }

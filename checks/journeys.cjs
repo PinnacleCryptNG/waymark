@@ -376,6 +376,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await gp.getByRole('button', { name: 'Send', exact: true }).click();
   await gp.waitForFunction(() => document.getElementById('voice-log').innerText.includes('balance is'), null, { timeout: 8000 }).catch(() => {});
   check('gemini: Pidgin balance question understood', (await gp.locator('#voice-log').innerText()).includes('Your demo balance is 245,800 naira.'));
+  check('gemini: conversation shows Gemini understood it', (await gp.locator('#voice-log').innerText()).includes('(understood by Gemini)'));
   check('gemini: only the sentence and bank names sent', gSent.length === 1 && Object.keys(gSent[0]).sort().join() === 'banks,text');
   await gctx.close();
   check('no JS errors in gemini journey', errors.length === 0, errors.join(' || '));

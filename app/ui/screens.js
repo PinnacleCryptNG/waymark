@@ -376,7 +376,7 @@ export function cancelled() {
 // ---------- Voice ----------
 
 const voiceLogItem = (entry) =>
-  `<li class="voice-log__item voice-log__item--${entry.who}"><span class="voice-log__who">${entry.who === 'you' ? 'You said:' : 'WAYMARK:'}</span> ${esc(entry.text)}</li>`;
+  `<li class="voice-log__item voice-log__item--${entry.who}"><span class="voice-log__who">${entry.who === 'you' ? 'You said:' : 'WAYMARK:'}</span> ${esc(entry.text)}${entry.via ? ` <span class="voice-log__via">(understood by ${entry.via === 'gemini' ? 'Gemini' : 'built-in rules'})</span>` : ''}</li>`;
 
 export const voiceLogHtml = (log) =>
   log.length ? log.map(voiceLogItem).join('') : '<li class="muted">Nothing yet.</li>';
