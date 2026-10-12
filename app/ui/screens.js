@@ -514,7 +514,7 @@ export function talk(state) {
     <section class="landing-cta" aria-labelledby="cta-h">
       <div class="landing-cta__inner">
         <h2 id="cta-h" class="section-title">Try it now</h2>
-        <p>Tap anywhere in this green band and WAYMARK will talk you through it. It is a demo: nothing here is real money.</p>
+        <p>Tap anywhere in this band and WAYMARK will talk you through it. It is a demo: nothing here is real money.</p>
         <p class="landing-cta__links"><a class="button button--on-dark" href="#start">Use the screens instead</a></p>
       </div>
     </section>
