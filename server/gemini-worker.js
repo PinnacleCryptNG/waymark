@@ -79,9 +79,16 @@ export function clean(raw) {
   };
 }
 
-export async function askGemini(text, banks, env, fetchFn = fetch) {
+// Google serves Gemini at two addresses. Keys from AI Studio usually work at the first; Vertex AI
+// "express" keys (they start with "AQ.") work at the second. Try the first, then the second.
+const ENDPOINTS = {
+  studio: (model) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+  vertex: (model) => `https://aiplatform.googleapis.com/v1/publishers/google/models/${encodeURIComponent(model)}:generateContent`,
+};
+
+async function callGemini(where, text, banks, env, fetchFn) {
   const model = env.GEMINI_MODEL || DEFAULT_MODEL;
-  const res = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+  const res = await fetchFn(ENDPOINTS[where](model), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
     body: JSON.stringify({
@@ -90,18 +97,50 @@ export async function askGemini(text, banks, env, fetchFn = fetch) {
       generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA },
     }),
   });
-  if (!res.ok) throw new Error(`Gemini ${res.status}`);
-  const data = await res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok) return { ok: false, status: res.status, message: String(data?.error?.message ?? data?.[0]?.error?.message ?? '').slice(0, 300) };
   const out = data?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
-  return clean(JSON.parse(out));
+  return { ok: true, status: res.status, intent: clean(JSON.parse(out)) };
+}
+
+const order = (env) => (ENDPOINTS[env.GEMINI_ENDPOINT] ? [env.GEMINI_ENDPOINT] : ['studio', 'vertex']);
+
+export async function askGemini(text, banks, env, fetchFn = fetch) {
+  let last;
+  for (const where of order(env)) {
+    last = await callGemini(where, text, banks, env, fetchFn);
+    if (last.ok) return last.intent;
+    if (![400, 401, 403, 404].includes(last.status)) break; // only a wrong address or key is worth the second try
+  }
+  throw new Error(`Gemini ${last.status}`);
+}
+
+/** GET /check: a plain report to open in a browser. Never shows the key. */
+export async function selfCheck(env, fetchFn = fetch) {
+  const report = { server: 'running', keySet: Boolean(env.GEMINI_API_KEY), model: env.GEMINI_MODEL || DEFAULT_MODEL,
+    allowedSites: env.ALLOWED_ORIGINS ?? '(none)', tries: [] };
+  if (!report.keySet) return { ...report, verdict: 'No GEMINI_API_KEY secret found. Add it under Settings, Variables and Secrets, as type Secret.' };
+  for (const where of order(env)) {
+    try {
+      const r = await callGemini(where, 'abeg send Musa 5k', [], env, fetchFn);
+      report.tries.push({ where, status: r.status, ...(r.ok ? { understood: r.intent } : { message: r.message }) });
+      if (r.ok) return { ...report, verdict: 'Working. Gemini understood the test sentence.' };
+    } catch (e) {
+      report.tries.push({ where, error: String(e).slice(0, 200) });
+    }
+  }
+  return { ...report, verdict: 'Gemini refused. See the messages above.' };
 }
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/check') {
+      return new Response(JSON.stringify(await selfCheck(env), null, 2), { headers: { 'Content-Type': 'application/json' } });
+    }
     const headers = cors(request.headers.get('Origin'), env);
     if (!headers) return json({ error: 'origin not allowed' }, 403, {});
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
-    const url = new URL(request.url);
     if (request.method !== 'POST' || url.pathname !== '/interpret') return json({ error: 'not found' }, 404, headers);
     if (!env.GEMINI_API_KEY) return json({ error: 'server not set up' }, 500, headers);
 

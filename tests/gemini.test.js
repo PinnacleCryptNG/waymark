@@ -1,7 +1,7 @@
 // The Gemini reader: server-side cleaning, client-side checking, and falling back to the rules.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { clean, askGemini, instructions } from '../server/gemini-worker.js';
+import worker, { clean, askGemini, instructions, selfCheck } from '../server/gemini-worker.js';
 import { createGeminiInterpreter, toIntent } from '../app/voice/gemini-interpreter.js';
 import { BANKS, BENEFICIARIES } from '../app/data/seed.js';
 
@@ -29,6 +29,31 @@ test('server sends the sentence and bank names to Gemini with the key in a heade
   assert.equal(sent.init.headers['x-goog-api-key'], 'k');
   assert.doesNotMatch(sent.url, /key=/);
   assert.match(instructions(['Lagoon Bank (demo)']), /Lagoon Bank \(demo\)/);
+});
+
+test('server tries the Vertex address when the AI Studio address refuses the key', async () => {
+  const urls = [];
+  const fake = async (url) => {
+    urls.push(url);
+    if (url.includes('generativelanguage')) return { ok: false, status: 400, json: async () => ({ error: { message: 'API key not valid.' } }) };
+    return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"type":"balance"}' }] } }] }) };
+  };
+  assert.equal((await askGemini('wetin remain', [], { GEMINI_API_KEY: 'AQ.x' }, fake)).type, 'balance');
+  assert.match(urls[1], /aiplatform\.googleapis\.com\/v1\/publishers\/google\/models\//);
+  urls.length = 0;
+  await assert.rejects(askGemini('x', [], { GEMINI_API_KEY: 'k', GEMINI_ENDPOINT: 'studio' }, fake));
+  assert.equal(urls.length, 1);
+});
+
+test('self-check reports without showing the key', async () => {
+  const fake = async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'API key not valid.' } }) });
+  const r = await selfCheck({ GEMINI_API_KEY: 'secret-key-123' }, fake);
+  assert.equal(r.keySet, true);
+  assert.equal(r.tries.length, 2);
+  assert.ok(!JSON.stringify(r).includes('secret-key-123'));
+  assert.match((await selfCheck({}, fake)).verdict, /No GEMINI_API_KEY/);
+  const res = await worker.fetch(new Request('https://w.example/check'), {});
+  assert.equal(res.status, 200);
 });
 
 test('server refuses other websites and bad requests', async () => {
