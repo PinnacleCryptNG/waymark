@@ -204,6 +204,20 @@ The design system is described in [docs/DESIGN.md](docs/DESIGN.md). In short:
 
 The font is self-hosted under the SIL Open Font License (`app/fonts/OFL-plus-jakarta-sans.txt`).
 
+### Free hosting on Render (no server to manage)
+
+`render.yaml` deploys the slim server to Render's free plan (512 MB, 0.1 CPU). The speaker model runs on ONNX
+(exported from SpeechBrain at build time, identical scores) and speech-to-text uses Whisper `tiny.en`, so the
+server peaks under 400 MB; a voice check takes about 5 seconds on that CPU.
+
+Render's free disk is wiped whenever the service sleeps (after 15 idle minutes), so set `DATABASE_URL` to a
+Postgres database (Neon's free plan works) to keep accounts and voiceprints. Without it the server uses SQLite.
+
+1. Render dashboard → New → Blueprint → pick this repo and branch.
+2. Paste the Neon connection string as `DATABASE_URL` when asked.
+
+The first visit after the service sleeps takes about a minute.
+
 ### Free hosting on Oracle Cloud
 
 On an Always Free Ampere VM (Ubuntu 24.04, ports 80 and 443 open in the security list), one command

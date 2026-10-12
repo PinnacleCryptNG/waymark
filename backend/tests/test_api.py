@@ -7,6 +7,18 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+
+def db_target(tmp_path):
+    """SQLite by default; set WAYMARK_TEST_DATABASE_URL to run the same tests against Postgres."""
+    url = os.environ.get("WAYMARK_TEST_DATABASE_URL")
+    if not url:
+        return str(tmp_path / "t.db")
+    import psycopg
+    with psycopg.connect(url, autocommit=True) as c:
+        c.execute("DROP TABLE IF EXISTS voice_samples, sessions, challenges, approvals, users")
+    return url
+
+
 from waymark_server.app import create_app
 from waymark_server.voice import Analysis, digits_in, digits_match
 
@@ -22,7 +34,7 @@ class FakeEngine:
 
 @pytest.fixture
 def client(tmp_path):
-    return TestClient(create_app(engine=FakeEngine(), db_path=str(tmp_path / "t.db"), static_dir=""))
+    return TestClient(create_app(engine=FakeEngine(), db_path=db_target(tmp_path), static_dir=""))
 
 
 def say(client, path, cid, clip, token=None):

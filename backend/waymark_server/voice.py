@@ -13,6 +13,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .fbank import fbank
+
 SAMPLE_RATE = 16000
 DIGIT_WORDS = {
     "zero": "0", "oh": "0", "o": "0", "one": "1", "won": "1", "two": "2", "to": "2", "too": "2",
@@ -91,15 +93,21 @@ def decode_audio(data: bytes) -> np.ndarray:
 
 class SpeechEngine:
     def __init__(self, model_dir: str | None = None):
+        import onnxruntime as ort
         from faster_whisper import WhisperModel
-        from speechbrain.inference.speaker import EncoderClassifier
-        import torch
 
-        self._torch = torch
         model_dir = model_dir or os.environ.get("WAYMARK_MODEL_DIR", os.path.join(os.path.dirname(__file__), "..", "models"))
-        self.speaker = EncoderClassifier.from_hparams(
-            source="speechbrain/spkrec-ecapa-voxceleb", savedir=os.path.join(model_dir, "ecapa"), run_opts={"device": "cpu"})
+        onnx_path = os.path.join(model_dir, "ecapa.onnx")
+        if not os.path.exists(onnx_path):
+            raise RuntimeError(f"{onnx_path} is missing: run scripts/export_onnx.py {model_dir}")
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = int(os.environ.get("WAYMARK_THREADS", "2"))
+        opts.enable_cpu_mem_arena = False  # keeps peak memory inside small hosts (Render free: 512 MB)
+        opts.enable_mem_pattern = False
+        self.speaker = ort.InferenceSession(onnx_path, opts, providers=["CPUExecutionProvider"])
+        self.mel_filters = np.load(os.path.join(model_dir, "mel_filters.npy"))
         self.asr = WhisperModel(os.environ.get("WAYMARK_WHISPER_MODEL", "base.en"), device="cpu", compute_type="int8",
+                                cpu_threads=int(os.environ.get("WAYMARK_THREADS", "2")),
                                 download_root=os.path.join(model_dir, "whisper"))
 
     def analyse(self, data: bytes) -> Analysis:
@@ -107,9 +115,8 @@ class SpeechEngine:
         seconds = len(wav) / SAMPLE_RATE
         if seconds < 0.8:
             raise ValueError("The recording was too short")
-        with self._torch.no_grad():
-            emb = self.speaker.encode_batch(self._torch.from_numpy(wav).unsqueeze(0)).squeeze().cpu().numpy()
-        segments, _ = self.asr.transcribe(wav, language="en", beam_size=5, vad_filter=True,
+        emb = self.speaker.run(None, {"feats": fbank(wav, self.mel_filters)[None]})[0]
+        segments, _ = self.asr.transcribe(wav, language="en", beam_size=int(os.environ.get("WAYMARK_BEAM", "5")), vad_filter=True,
                                           initial_prompt="The speaker reads out single digits, for example: 4 7 2 9 1.")
         transcript = " ".join(s.text for s in segments).strip()
         return Analysis(embedding=emb.astype(np.float32), digits=digits_in(transcript), transcript=transcript, seconds=seconds)

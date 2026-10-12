@@ -29,7 +29,7 @@ else
   git clone -q --branch "$BRANCH" "$REPO" "$SRC"
 fi
 
-docker build -q -t waymark -f "$SRC/backend/Dockerfile" "$SRC"
+docker build --build-arg WHISPER_MODEL=base.en -q -t waymark -f "$SRC/backend/Dockerfile" "$SRC"
 mkdir -p "$DATA/db" "$DATA/models"
 docker rm -f waymark >/dev/null 2>&1 || true
 docker run -d --name waymark --restart unless-stopped \

@@ -1,0 +1,6 @@
+# Only needed once, to build models/ecapa.onnx with scripts/export_onnx.py
+numpy>=1.26
+torch>=2.2
+torchaudio>=2.2
+speechbrain>=1.0
+onnx>=1.16

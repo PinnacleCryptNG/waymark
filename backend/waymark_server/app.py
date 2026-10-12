@@ -70,7 +70,7 @@ def env_float(name, default):
 
 def create_app(engine=None, db_path=None, static_dir=None) -> FastAPI:
     app = FastAPI(title="WAYMARK API")
-    store = Store(db_path or os.environ.get("WAYMARK_DB", str(Path(__file__).parent.parent / "waymark.db")))
+    store = Store(db_path or os.environ.get("DATABASE_URL") or os.environ.get("WAYMARK_DB", str(Path(__file__).parent.parent / "waymark.db")))
     match_threshold = env_float("WAYMARK_VOICE_THRESHOLD", 0.45)
     enroll_threshold = env_float("WAYMARK_ENROLL_THRESHOLD", 0.40)
 

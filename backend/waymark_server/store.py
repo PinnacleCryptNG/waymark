@@ -1,4 +1,4 @@
-"""SQLite storage: users, voiceprints, sessions, challenges and each user's ledger (as JSON)."""
+"""SQLite or Postgres storage: users, voiceprints, sessions, challenges and each user's ledger (as JSON)."""
 from __future__ import annotations
 
 import json
@@ -36,18 +36,44 @@ CREATE TABLE IF NOT EXISTS approvals (
 """
 
 
+SCHEMA_PG = (SCHEMA.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+             .replace("BLOB", "BYTEA").replace("REAL", "DOUBLE PRECISION"))
+
+
 class Store:
-    def __init__(self, path: str):
-        self.db = sqlite3.connect(path, check_same_thread=False)
-        self.db.row_factory = sqlite3.Row
-        self.db.executescript(SCHEMA)
+    """`target` is a SQLite file path or a postgres:// URL (e.g. a free Neon database)."""
+
+    def __init__(self, target: str):
+        self.target = target
+        self.pg = target.startswith(("postgres://", "postgresql://"))
         self.lock = threading.RLock()
+        self._connect()
+
+    def _connect(self):
+        if self.pg:
+            import psycopg
+            from psycopg.rows import dict_row
+            self.db = psycopg.connect(self.target, row_factory=dict_row, autocommit=True)
+            self.db.execute(SCHEMA_PG)
+        else:
+            self.db = sqlite3.connect(self.target, check_same_thread=False)
+            self.db.row_factory = sqlite3.Row
+            self.db.executescript(SCHEMA)
 
     def q(self, sql, args=()):
         with self.lock:
-            cur = self.db.execute(sql, args)
-            self.db.commit()
-            return cur
+            if not self.pg:
+                cur = self.db.execute(sql, args)
+                self.db.commit()
+                return cur
+            import psycopg
+            for attempt in (0, 1):
+                try:
+                    return self.db.execute(sql.replace("?", "%s"), args)
+                except psycopg.OperationalError:  # hosted Postgres drops idle connections
+                    if attempt:
+                        raise
+                    self._connect()
 
     def one(self, sql, args=()):
         return self.q(sql, args).fetchone()
@@ -60,9 +86,11 @@ class Store:
         return self.one("SELECT * FROM users WHERE id = ?", (user_id,))
 
     def create_user(self, phone, ledger):
-        cur = self.q("INSERT INTO users (phone, status, created_at, ledger) VALUES (?, 'enrolling', ?, ?)",
-                     (phone, time.time(), json.dumps(ledger)))
-        return cur.lastrowid
+        sql = "INSERT INTO users (phone, status, created_at, ledger) VALUES (?, 'enrolling', ?, ?)"
+        args = (phone, time.time(), json.dumps(ledger))
+        if self.pg:
+            return self.one(sql + " RETURNING id", args)["id"]
+        return self.q(sql, args).lastrowid
 
     def set_status(self, user_id, status):
         self.q("UPDATE users SET status = ? WHERE id = ?", (status, user_id))
