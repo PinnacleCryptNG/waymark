@@ -7,7 +7,7 @@ workers_dev = true
 preview_urls = false
 
 [vars]
-ALLOWED_ORIGINS = "https://pinnaclecryptng.github.io,http://localhost:8080"
+ALLOWED_ORIGINS = "https://pinnaclecryptng.github.io,https://waymark-gixq.onrender.com,http://localhost:8080"
 # GEMINI_MODEL = "gemini-flash-lite-latest"
 
 # The key is a secret, set in the Cloudflare dashboard, never written here.
