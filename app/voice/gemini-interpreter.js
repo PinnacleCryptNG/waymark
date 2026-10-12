@@ -52,6 +52,12 @@ export function createGeminiInterpreter({ endpoint, timeoutMs = 4000, fetchFn = 
         });
         if (!res.ok) throw new Error(String(res.status));
         const intent = toIntent((await res.json())?.intent, ctx);
+        if (intent?.type === 'transfer' && rules.type === 'transfer') {
+          // Gemini sometimes drops a detail the rules heard plainly; keep what either reader found.
+          intent.amountKobo ??= rules.amountKobo ?? null;
+          intent.bankCode ??= rules.bankCode ?? null;
+          if (!intent.accountNumber && !intent.payeeIds.length && rules.accountNumber) intent.accountNumber = rules.accountNumber;
+        }
         if (intent) return { ...intent, via: 'gemini' };
       } catch { /* fall through to the rules */ } finally {
         clearTimeout(timer);

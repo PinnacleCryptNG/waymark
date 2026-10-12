@@ -1,2 +1,7 @@
 checks/screenshots/
 node_modules/
+backend-venv/
+backend/models/
+backend/*.db
+__pycache__/
+.pytest_cache/

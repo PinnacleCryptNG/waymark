@@ -59,16 +59,14 @@ const payeeButtons = (beneficiaries) => `<ul class="choice-list">
 // ---------- Entry and sign-in ----------
 
 export function welcome(state) {
-  const quick = state.biometric.available && state.biometric.credentialId;
   return {
     title: 'Use the screens',
     html: `<p class="kicker">Screens and screen readers</p>
       ${h1('Use WAYMARK with the screens')}
       ${errorSummary(state.ui.errors)}
-      <p class="intro">Works with TalkBack and VoiceOver. Sign-in takes three short steps, and you approve payments with your fingerprint.</p>
+      <p class="intro">Works with TalkBack and VoiceOver. Your WAYMARK account is protected by your voice, so you sign up and sign in by talking: say your mobile number, then say the numbers WAYMARK gives you. After that, every screen is here, and you approve payments by saying numbers again.</p>
       <div class="actions">
-        ${quick ? `<button type="button" class="button" id="bio-signin" data-action="biometric-signin">${icon('fingerprint')}<span>Sign in with fingerprint</span></button>` : ''}
-        <a class="button${quick ? ' button--secondary' : ''}" href="#signin">${quick ? 'Sign in another way' : 'Start the demo'}</a>
+        <a class="button" href="#welcome">${icon('mic')}<span>Sign in by voice</span></a>
       </div>
       <section class="notice" aria-labelledby="demo-h">
         <h2 id="demo-h">This is a demo</h2>
@@ -122,12 +120,12 @@ export function secure(state) {
       ${h1('How do you want to approve payments?')}
       ${errorSummary(state.ui.errors)}
       ${available
-        ? `<p class="intro">Your fingerprint is the fastest and most private way. One touch approves a payment, and nothing is spoken or typed, so nobody nearby can hear it.</p>
+        ? `<p class="intro">Your phone lock (fingerprint, face or phone PIN) is the fastest and most private way. It approves a payment, and nothing is spoken aloud, so nobody nearby can hear it.</p>
            <div class="actions">
-             <button type="button" class="button" id="bio-setup" data-action="setup-biometric">${icon('fingerprint')}<span>Use my fingerprint</span></button>
+             <button type="button" class="button" id="bio-setup" data-action="setup-biometric">${icon('fingerprint')}<span>Use my phone lock</span></button>
              <a class="button button--secondary" href="#create-pin"><span>Use a ${PIN} instead</span></a>
            </div>`
-        : `<p class="intro">This phone or browser cannot use a fingerprint here, so you will create a demo ${PIN} instead.</p>
+        : `<p class="intro">This phone or browser cannot use its phone lock here, so you will create a demo ${PIN} instead.</p>
            <div class="actions"><a class="button" href="#create-pin"><span>Create a ${PIN}</span></a></div>`}`,
   };
 }
@@ -303,9 +301,8 @@ export function review(state) {
   const errs = state.ui.errors;
   const t = state.flow.transfer;
   const p = t.payee;
-  const biometric = state.auth.method === 'biometric';
   const busy = state.ui.submitting;
-  const confirmLabel = busy ? 'Processing…' : biometric ? 'Confirm with fingerprint' : 'Confirm transfer';
+  const confirmLabel = busy ? 'Processing…' : 'Confirm with your voice';
   return {
     title: 'Review transfer',
     nav: 'pay',
@@ -313,10 +310,8 @@ export function review(state) {
       ${errorSummary(errs)}
       <p class="lede" id="review-summary">Send ${money(t.amountKobo)} to <strong>${esc(p.name)}</strong>, ${esc(bankName(p.bankCode))}, ${accountEnding(p.accountNumber)}. Fee ${money(t.feeKobo)}. Total ${money(t.totalKobo)}.${t.note ? ` Note: ${esc(t.note)}.` : ''} Nothing has been sent yet.</p>
       <form data-form="confirm" novalidate>
-        ${biometric ? '' : `
-          <p class="hint" id="pin-privacy">Your keyboard may read keys aloud as you touch them. Use headphones if you can.</p>
-          ${textField({ id: 'pin', label: 'Demo PIN', error: errorFor(errs, 'pin'), type: 'password', inputmode: 'numeric', autocomplete: 'off', extra: 'maxlength="4" data-pin-count aria-label="Demo pin"' })}`}
-        <button class="button button--confirm" type="submit" id="confirm-btn" ${busy ? 'disabled aria-disabled="true" aria-busy="true"' : ''}>${biometric && !busy ? icon('fingerprint') : ''}<span>${confirmLabel}</span></button>
+        <p class="hint" id="voice-hint">WAYMARK will say five numbers. Say them back after the tone, and it checks that it is your voice.</p>
+        <button class="button button--confirm" type="submit" id="confirm-btn" ${busy ? 'disabled aria-disabled="true" aria-busy="true"' : ''}>${busy ? '' : icon('mic')}<span>${confirmLabel}</span></button>
         <details class="demo-switch">
           <summary>Demo controls for judges</summary>
           <fieldset>
@@ -403,10 +398,16 @@ const voiceLogItem = (entry) =>
 export const voiceLogHtml = (log) =>
   log.length ? log.map(voiceLogItem).join('') : '<li class="muted">Nothing yet.</li>';
 
+/** The live feed: the last few turns, large, so anyone looking at the phone sees what WAYMARK is doing. */
+export const liveFeedHtml = (log) =>
+  log.slice(-4).map((e) => `<li class="live-feed__item live-feed__item--${e.who}"><span class="live-feed__who">${e.who === 'you' ? 'You said' : 'WAYMARK'}</span>${esc(e.text)}</li>`).join('');
+
+const liveFeed = (log) => `<ol class="live-feed" id="live-feed" aria-hidden="true"${log.length ? '' : ' hidden'}>${liveFeedHtml(log)}</ol>`;
+
 /** Which look the Talk button has, from its status line. */
 export function talkState(status) {
   const key = Object.keys(TALK_STATUS).find((k) => TALK_STATUS[k] === status);
-  return { listening: 'listening', speaking: 'speaking', working: 'working', tap: 'tap' }[key] ?? 'idle';
+  return { listening: 'listening', recording: 'listening', speaking: 'speaking', working: 'working', checking: 'working', tap: 'tap' }[key] ?? 'idle';
 }
 
 /**
@@ -420,10 +421,10 @@ export function talk(state) {
     ? 'This browser cannot listen. Use Chrome on Android, or type below.'
     : state.voice.status ?? TALK_STATUS.ready;
   const privacy = AI_ENDPOINT
-    ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Your balance and saved payees stay on this phone.'
-    : 'In Chrome, your speech is sent to Google to turn it into text.';
+    ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Voice checks are recorded and sent to the WAYMARK server, which keeps a voiceprint, not the recordings.'
+    : 'In Chrome, your speech is sent to Google to turn it into text. Voice checks are recorded and sent to the WAYMARK server, which keeps a voiceprint, not the recordings.';
   const target = `<button type="button" id="talk-btn" class="talk-target" data-state="${talkState(status)}">
-        <span class="talk-target__icon" aria-hidden="true">${icon('mic', 'icon talk-icon talk-icon--mic')}${icon('fingerprint', 'icon talk-icon talk-icon--fingerprint')}<span class="talk-bars"><i></i><i></i><i></i><i></i></span></span>
+        <span class="talk-target__icon" aria-hidden="true">${icon('mic', 'icon talk-icon talk-icon--mic')}${icon('mic', 'icon talk-icon talk-icon--tap')}<span class="talk-bars"><i></i><i></i><i></i><i></i></span></span>
         <span class="talk-target__label">Tap anywhere to talk</span>
         <span class="talk-target__status" id="talk-status" aria-hidden="true">${esc(status)}</span>
       </button>`;
@@ -444,6 +445,7 @@ export function talk(state) {
       focus: '#talk-btn',
       html: `<h1 id="page-title" tabindex="-1" class="sr-only">Talk to WAYMARK</h1>
       ${target}
+      ${liveFeed(state.voice.log)}
       <div class="talk-foot">
         <p class="talk-note">Demo only. No real money moves. ${privacy}</p>
         <p class="talk-switch"><a href="#home">Use the screens instead</a></p>
@@ -462,11 +464,16 @@ export function talk(state) {
     html: `<section class="landing-hero" aria-labelledby="page-title">
       <div class="landing-hero__inner">
         <div class="landing-hero__copy">
-          <p class="kicker kicker--on-dark">Voice banking for blind and low-vision Nigerians</p>
-          <h1 id="page-title" tabindex="-1">Banking you can hear.</h1>
-          <p class="landing-hero__lede">Say who to pay. WAYMARK reads back their real name before any money moves. Your fingerprint sends it.</p>
+          <p class="hero-badge">${icon('ear', 'icon hero-badge__icon')}<span>For blind and low-vision Nigerians</span></p>
+          <h1 id="page-title" tabindex="-1">Banking you can <span class="hl">hear.</span></h1>
+          <p class="landing-hero__lede">Say who to pay. WAYMARK reads back their real name before any money moves. Only your voice can approve it.</p>
+          <ul class="hero-points">
+            <li>${icon('check')}<span>Voice-verified payments</span></li>
+            <li>${icon('check')}<span>Real names read back</span></li>
+            <li>${icon('check')}<span>Never pays twice</span></li>
+          </ul>
         </div>
-        ${target}
+        <div class="landing-hero__talk">${target}${liveFeed(state.voice.log)}</div>
         <div class="landing-hero__links">
           <p class="talk-switch"><a href="#start">Use the screens instead</a></p>
           <p class="talk-note">Demo only. No real money moves. ${privacy}</p>
@@ -475,8 +482,8 @@ export function talk(state) {
           <div class="demo-phone__screen">
             <p class="demo-phone__bar"><span>WAYMARK</span><span>Listening</span></p>
             <p class="bubble bubble--you">“Send five thousand naira to Musa.”</p>
-            <p class="bubble bubble--waymark">Musa Ibrahim, Savanna Bank, ending 8 8 4 6. Fee 10 naira. Touch your fingerprint to send.</p>
-            <p class="bubble bubble--touch">${icon('fingerprint')}<span>Fingerprint approved</span></p>
+            <p class="bubble bubble--waymark">Musa Ibrahim, Savanna Bank, ending 8 8 4 6. Fee 10 naira. Tap, then say: 4, 7, 2, 9, 1.</p>
+            <p class="bubble bubble--touch">${icon('mic')}<span>“4, 7, 2, 9, 1”</span></p>
             <p class="bubble bubble--waymark">Done. 5,000 naira sent to Musa Ibrahim.</p>
           </div>
           <figcaption>What a payment sounds like</figcaption>
@@ -490,14 +497,14 @@ export function talk(state) {
         <ol class="steps-list">
           <li><span class="steps-list__n" aria-hidden="true">1</span><div><h3>Say it</h3><p>Tap anywhere and say who to pay and how much, in Nigerian English or Pidgin.</p></div></li>
           <li><span class="steps-list__n" aria-hidden="true">2</span><div><h3>Hear it back</h3><p>WAYMARK reads the account owner's real name, the fee and the total, and warns you about lookalike accounts.</p></div></li>
-          <li><span class="steps-list__n" aria-hidden="true">3</span><div><h3>Touch to send</h3><p>Your fingerprint approves it. Nothing is spoken aloud or typed, so nobody nearby learns your secrets.</p></div></li>
+          <li><span class="steps-list__n" aria-hidden="true">3</span><div><h3>Confirm with your voice</h3><p>WAYMARK gives you five random numbers to say. The server checks it is your voice, and fresh numbers each time mean a recording of you will not work.</p></div></li>
         </ol>
       </section>
       <section class="landing-section" aria-labelledby="safe-h">
         <p class="kicker">Safe by design</p>
         <h2 id="safe-h" class="section-title">The AI listens. It never moves money.</h2>
         <ul class="rules">
-          <li>${icon('shield', 'icon rules__icon')}<span><strong>“Yes” never sends.</strong> Every payment needs a tap and your fingerprint.</span></li>
+          <li>${icon('shield', 'icon rules__icon')}<span><strong>“Yes” never sends.</strong> Every payment needs a tap and a voice check.</span></li>
           <li>${icon('ear', 'icon rules__icon')}<span><strong>Read back from the bank.</strong> Names and amounts come from the bank, not from the AI.</span></li>
           <li>${icon('warning', 'icon rules__icon')}<span><strong>Lookalike warnings.</strong> A similar name on a different account is called out before you pay.</span></li>
           <li>${icon('clock', 'icon rules__icon')}<span><strong>Never pays twice.</strong> If the network drops, WAYMARK checks the status instead of sending again.</span></li>
@@ -512,7 +519,7 @@ export function talk(state) {
     <section class="landing-cta" aria-labelledby="cta-h">
       <div class="landing-cta__inner">
         <h2 id="cta-h" class="section-title">Try it now</h2>
-        <p>Tap anywhere in this green band and WAYMARK will talk you through it. It is a demo: nothing here is real money.</p>
+        <p>Tap anywhere in this band and WAYMARK will talk you through it. It is a demo: nothing here is real money.</p>
         <p class="landing-cta__links"><a class="button button--on-dark" href="#start">Use the screens instead</a></p>
       </div>
     </section>
@@ -531,9 +538,9 @@ export function help(state) {
       <section aria-labelledby="h-demo"><h2 id="h-demo">About this demo</h2>
         <p>WAYMARK is a prototype. Every name, account and amount is invented, and no real money moves. ${state.signedIn ? '' : '<a href="#welcome">Back to the start</a>.'}</p></section>
       <section aria-labelledby="h-approve"><h2 id="h-approve">Approving payments</h2>
-        <p>If you chose your fingerprint, one touch on the sensor approves a payment. Nothing is spoken or typed. If you chose a ${PIN}, your phone's keyboard may read keys aloud as you touch them, so use headphones. In this demo the phone confirms the fingerprint; a real bank would also check it on its own servers.</p></section>
+        <p>Your voice protects your account. When you sign up, WAYMARK asks you to say five random numbers three times and the server saves a voiceprint (a summary of how your voice sounds, not the recordings). To sign in or approve a payment, you say new random numbers and the server checks both the numbers and the voice. After five voice checks that do not match, the account locks for 15 minutes. Voice checks can be fooled by very good AI voice copies, so a real bank would add a second check.</p></section>
       <section aria-labelledby="h-voice"><h2 id="h-voice">Talking to WAYMARK</h2>
-        <p>WAYMARK starts by voice and speaks for itself, so you do not need a screen reader. Tap anywhere on the Talk screen and it speaks to you; after it finishes, a rising tone means it is listening and a falling tone means it has stopped. Tap at any time to interrupt. You can sign up, check your balance, hear recent activity and pay people by voice. ${esc(EXAMPLES)} Before sending, WAYMARK reads back who, how much and the fee; you send by tapping and touching your fingerprint sensor. Voice payments are limited to 50,000 naira. Say repeat to hear something again, or screens to use the screens. ${AI_ENDPOINT ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Only the sentence is sent; your balance and saved payees stay on this phone. If Gemini cannot be reached, WAYMARK uses its built-in rules.' : 'In Chrome, your speech is sent to Google to turn it into text.'}</p></section>
+        <p>WAYMARK starts by voice and speaks for itself, so you do not need a screen reader. Tap anywhere on the Talk screen and it speaks to you; after it finishes, a rising tone means it is listening and a falling tone means it has stopped. Tap at any time to interrupt. You can sign up, check your balance, hear recent activity and pay people by voice. ${esc(EXAMPLES)} Before sending, WAYMARK reads back who, how much and the fee; you send by tapping and saying the numbers WAYMARK gives you. Voice payments are limited to 50,000 naira. Say repeat to hear something again, or screens to use the screens. ${AI_ENDPOINT ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Only the sentence is sent. If Gemini cannot be reached, WAYMARK uses its built-in rules.' : 'In Chrome, your speech is sent to Google to turn it into text.'}</p></section>
       <section aria-labelledby="h-status"><h2 id="h-status">What each transfer status means</h2>
         <dl class="glossary">
           <dt>Completed</dt><dd>The money has gone. Your balance shows the debit once.</dd>
@@ -570,13 +577,17 @@ export function settings(state) {
         <div class="check"><input type="checkbox" id="haptics" name="haptics" aria-describedby="haptics-hint"${p.haptics ? ' checked' : ''}><label for="haptics">Vibrate on transfer outcome</label>
           <p class="hint" id="haptics-hint">${supported ? 'A different vibration for each outcome. Never the only signal.' : 'This browser cannot vibrate, so this setting has no effect here.'}</p></div>
       </form>
-      ${state.signedIn ? `<section aria-labelledby="reset-h" class="danger-zone"><h2 id="reset-h">Reset demo</h2>
-        <p>Restores the starting balance and activity, removes fingerprint sign-in and your demo ${PIN}, and returns to the start.</p>
+      ${state.signedIn ? `<section aria-labelledby="account-h"><h2 id="account-h">Your account</h2>
+        <p>Signing out keeps your account and voiceprint. Next time, sign in by saying the numbers WAYMARK reads to you.</p>
+        <button type="button" class="button button--secondary" data-action="sign-out">Sign out</button>
+      </section>
+      <section aria-labelledby="reset-h" class="danger-zone"><h2 id="reset-h">Forget this phone</h2>
+        <p>Signs you out, removes your phone number from this device and resets these settings. Your account, balance and voiceprint stay on the WAYMARK server.</p>
         ${state.ui.confirmReset
-          ? `<p class="warning" id="reset-confirm" tabindex="-1">Are you sure? This cannot be undone.</p>
-             <div class="actions actions--inline"><button type="button" class="button button--danger" data-action="reset-yes">Yes, reset demo</button>
-             <button type="button" class="button button--secondary" data-action="reset-no">Keep my demo</button></div>`
-          : '<button type="button" class="button button--secondary" data-action="reset-ask">Reset demo</button>'}
+          ? `<p class="warning" id="reset-confirm" tabindex="-1">Forget this phone number on this device?</p>
+             <div class="actions actions--inline"><button type="button" class="button button--danger" data-action="reset-yes">Yes, forget it</button>
+             <button type="button" class="button button--secondary" data-action="reset-no">Keep it</button></div>`
+          : '<button type="button" class="button button--secondary" data-action="reset-ask">Forget this phone</button>'}
       </section>` : ''}`,
   };
 }

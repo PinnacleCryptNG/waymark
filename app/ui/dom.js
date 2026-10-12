@@ -30,8 +30,9 @@ export function focusElement(el) {
     el.setAttribute('tabindex', '-1');
   }
   el.focus({ preventScroll: true });
-  // Scroll only as far as needed, so a page that already shows the element does not jump.
-  el.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+  // Scroll only if the element starts off screen, so a page that already shows it does not jump.
+  const { top } = el.getBoundingClientRect();
+  if (top < 0 || top > window.innerHeight * 0.8) el.scrollIntoView({ block: 'start', behavior: 'auto' });
 }
 
 /** Error summary at the top of a form. Each entry is { field, message }. */

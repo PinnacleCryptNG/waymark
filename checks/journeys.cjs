@@ -241,7 +241,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await fp.getByRole('button', { name: 'Continue' }).click();
   await fpAt('How do you want to approve payments?');
   await fp.screenshot({ path: OUT + '12-approve-choice.png', fullPage: true });
-  await fp.getByRole('button', { name: 'Use my fingerprint' }).click();
+  await fp.getByRole('button', { name: 'Use my phone lock' }).click();
   check('fingerprint set-up signs in', await fpAt('Home'));
   check('fingerprint flash', (await fp.locator('.flash').innerText()).includes('fingerprint'));
   await fp.getByRole('button', { name: /^Pay Musa Ibrahim/ }).click();
@@ -252,17 +252,17 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   check('fingerprint review has no PIN field', (await fp.locator('#pin').count()) === 0);
   await fp.screenshot({ path: OUT + '13-review-fingerprint.png', fullPage: true });
   await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false });
-  await fp.getByRole('button', { name: 'Confirm with fingerprint' }).click();
+  await fp.getByRole('button', { name: 'Confirm with phone lock' }).click();
   await fp.waitForSelector('.error-summary', { timeout: 10000 }).catch(() => {});
   check('failed fingerprint sends nothing', (await fp.locator('h1').innerText()) === 'Review transfer'
     && (await fp.locator('.error-summary').innerText()).includes('Nothing was sent'));
   await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: true });
-  await fp.getByRole('button', { name: 'Confirm with fingerprint' }).click();
+  await fp.getByRole('button', { name: 'Confirm with phone lock' }).click();
   check('fingerprint approves transfer', await fpAt('Transfer completed'));
   await fp.reload();
   await fp.goto(BASE + '#start');
   await fpAt('Use WAYMARK with the screens');
-  await fp.getByRole('button', { name: 'Sign in with fingerprint' }).click();
+  await fp.getByRole('button', { name: 'Sign in with phone lock' }).click();
   check('one-touch sign-in on return', await fpAt('Home'));
   await ctx.close();
   check('no JS errors in fingerprint journey', errors.length === 0, errors.join(' || '));
@@ -308,7 +308,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   await tapAnywhere();
   check('voice: welcome spoken on first tap', await waitSaid('Welcome to WAYMARK'));
   check('voice: phone read back, code spoken', await waitSaid('the code is 1 2 3 4 5 6'));
-  check('voice: asks for a tap and fingerprint', await waitSaid('touch your fingerprint sensor'));
+  check('voice: asks for a tap and fingerprint', await waitSaid('confirm with your phone lock'));
   await vp.waitForFunction(() => document.getElementById('talk-status').textContent.includes('fingerprint'));
   await vp.screenshot({ path: OUT + '14-voice-signup.png', fullPage: true });
   await say('send 500 naira to Musa');

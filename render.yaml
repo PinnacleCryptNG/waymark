@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: waymark
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: WAYMARK_WHISPER_MODEL
+        value: tiny.en
+      - key: WAYMARK_BEAM
+        value: "1"
+      - key: WAYMARK_THREADS
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
