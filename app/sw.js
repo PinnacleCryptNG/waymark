@@ -1,15 +1,14 @@
 // Offline support: always fetch the latest files when online, keep a copy for when offline.
-const CACHE = 'waymark-v9';
+const CACHE = 'waymark-v10';
 const FILES = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './ui/app.js', './ui/screens.js', './ui/dom.js', './ui/store.js', './ui/haptics.js', './ui/biometric.js', './ui/icons.js', './ui/talk.js',
   './domain/money.js', './domain/spoken.js', './domain/transfer.js', './domain/ledger.js',
   './domain/directory.js', './domain/validation.js', './data/seed.js',
-  './bank/bank-api.js', './bank/demo-bank.js', './bank/transfer-client.js',
-  './icons/mark.svg', './img/contours.svg', './icons/icon-192.png',
-  './fonts/atkinson-hyperlegible-latin-400-normal.woff2', './fonts/atkinson-hyperlegible-latin-700-normal.woff2',
-  './fonts/bricolage-grotesque-latin-700-normal.woff2', './fonts/bricolage-grotesque-latin-800-normal.woff2',
-  './voice/intent.js', './voice/dialog.js', './voice/interpreter.js', './voice/speech.js', './voice/assistant.js', './voice/gemini-interpreter.js', './config.js',
+  './bank/bank-api.js', './bank/demo-bank.js', './bank/server-bank.js', './bank/transfer-client.js',
+  './icons/mark.svg', './img/waves.svg', './icons/icon-192.png',
+  './fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2', './fonts/unbounded-latin-wght-normal.woff2',
+  './voice/intent.js', './voice/dialog.js', './voice/interpreter.js', './voice/speech.js', './voice/assistant.js', './voice/gemini-interpreter.js', './voice/voice-auth.js', './voice/recorder.js', './config.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -24,7 +23,8 @@ self.addEventListener('activate', (e) => {
 
 // Network first, so a new version shows at once; the saved copy is used only when offline.
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== self.location.origin) return;
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
   e.respondWith(caches.open(CACHE).then(async (cache) => {
     try {
       const res = await fetch(e.request, { cache: 'no-cache' });

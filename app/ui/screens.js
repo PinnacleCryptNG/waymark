@@ -465,8 +465,8 @@ export function talk(state) {
       <div class="landing-hero__inner">
         <div class="landing-hero__copy">
           <p class="kicker kicker--on-dark">Voice banking for blind and low-vision Nigerians</p>
-          <h1 id="page-title" tabindex="-1">Banking you can hear.</h1>
-          <p class="landing-hero__lede">Say who to pay. WAYMARK reads back their real name before any money moves. You confirm it the way you unlock your phone.</p>
+          <h1 id="page-title" tabindex="-1">Banking you can <span class="hl">hear.</span></h1>
+          <p class="landing-hero__lede">Say who to pay. WAYMARK reads back their real name before any money moves. Only your voice can approve it.</p>
         </div>
         <div class="landing-hero__talk">${target}${liveFeed(state.voice.log)}</div>
         <div class="landing-hero__links">

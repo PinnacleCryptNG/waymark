@@ -189,17 +189,18 @@ docs/       PRD and review (Word)
 
 The design system is described in [docs/DESIGN.md](docs/DESIGN.md). In short:
 
-- **Identity:** a waymark yellow "blaze" on deep green.
-- **Type:** Bricolage Grotesque for headlines and large amounts, and Atkinson Hyperlegible, a typeface
-  made for low-vision readers, for reading text.
-- **Background:** a trail-map contour background, drifting slowly on the start page.
+- **Identity ("Midnight"):** a deep midnight canvas with a slow violet, magenta and amber aurora and faint
+  sound rings behind every screen. Amber marks anything you can act on.
+- **Type:** Unbounded, a wide geometric face, for headlines and large amounts, and Atkinson Hyperlegible
+  Next, made for low-vision readers, for reading text at a 19px base.
+- **Talk button:** a glass stage with a glowing voice orb. Each state has its own shape as well as its own
+  words: listening rings, violet while speaking, a turning ring while working, amber while waiting for your
+  voice check.
 - **Start page:** "Banking you can hear." explains the product in about three seconds, while the top of
   the page stays one big tap-to-talk target.
-- **Layout:** rows on rules instead of stacks of cards, and a yellow-and-dark focus ring.
-- **Talk button:** each state (listening, speaking, working, waiting for a fingerprint) has its own shape as
-  well as its own words.
+- High contrast mode swaps everything for black, white and yellow, with no gradients.
 
-Both fonts are self-hosted under the SIL Open Font License (`app/fonts/OFL.txt`, `app/fonts/OFL-bricolage.txt`).
+Both fonts are self-hosted under the SIL Open Font License (`app/fonts/OFL-unbounded.txt`, `app/fonts/OFL-atkinson-next.txt`).
 
 ## How it behaves
 

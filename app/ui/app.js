@@ -340,9 +340,6 @@ function applyPrefs() {
   root.dataset.textSize = state.prefs.textSize;
   root.dataset.contrast = state.prefs.highContrast ? 'high' : 'standard';
   root.dataset.motion = state.prefs.reducedMotion ? 'reduce' : 'standard';
-  const preview = new URLSearchParams(location.search);
-  root.dataset.theme = preview.get('theme') ?? '';
-  root.dataset.bg = preview.get('bg') ?? '';
 }
 
 // ---------- Forms ----------
