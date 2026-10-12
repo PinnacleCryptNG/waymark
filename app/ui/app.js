@@ -613,6 +613,17 @@ const ACTIONS = {
     if (error) go('amount'); // amount screen keeps the entered values for correction
   },
 
+  async 'sign-out'() {
+    await auth.signOut();
+    talk.stop();
+    state.signedIn = false;
+    state.auth = { method: null };
+    state.voice = { log: [], status: null };
+    assistant = makeAssistant();
+    state.bankData = { account: null, activity: [], beneficiaries: [] };
+    resetFlow();
+    go('welcome');
+  },
   'reset-ask'() { state.ui.confirmReset = true; rerender('#reset-confirm'); },
   'reset-no'() { state.ui.confirmReset = false; rerender(); },
   async 'reset-yes'() {

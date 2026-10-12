@@ -572,13 +572,17 @@ export function settings(state) {
         <div class="check"><input type="checkbox" id="haptics" name="haptics" aria-describedby="haptics-hint"${p.haptics ? ' checked' : ''}><label for="haptics">Vibrate on transfer outcome</label>
           <p class="hint" id="haptics-hint">${supported ? 'A different vibration for each outcome. Never the only signal.' : 'This browser cannot vibrate, so this setting has no effect here.'}</p></div>
       </form>
-      ${state.signedIn ? `<section aria-labelledby="reset-h" class="danger-zone"><h2 id="reset-h">Reset demo</h2>
-        <p>Restores the starting balance and activity, removes phone-lock sign-in and your demo ${PIN}, and returns to the start.</p>
+      ${state.signedIn ? `<section aria-labelledby="account-h"><h2 id="account-h">Your account</h2>
+        <p>Signing out keeps your account and voiceprint. Next time, sign in by saying the numbers WAYMARK reads to you.</p>
+        <button type="button" class="button button--secondary" data-action="sign-out">Sign out</button>
+      </section>
+      <section aria-labelledby="reset-h" class="danger-zone"><h2 id="reset-h">Forget this phone</h2>
+        <p>Signs you out, removes your phone number from this device and resets these settings. Your account, balance and voiceprint stay on the WAYMARK server.</p>
         ${state.ui.confirmReset
-          ? `<p class="warning" id="reset-confirm" tabindex="-1">Are you sure? This cannot be undone.</p>
-             <div class="actions actions--inline"><button type="button" class="button button--danger" data-action="reset-yes">Yes, reset demo</button>
-             <button type="button" class="button button--secondary" data-action="reset-no">Keep my demo</button></div>`
-          : '<button type="button" class="button button--secondary" data-action="reset-ask">Reset demo</button>'}
+          ? `<p class="warning" id="reset-confirm" tabindex="-1">Forget this phone number on this device?</p>
+             <div class="actions actions--inline"><button type="button" class="button button--danger" data-action="reset-yes">Yes, forget it</button>
+             <button type="button" class="button button--secondary" data-action="reset-no">Keep it</button></div>`
+          : '<button type="button" class="button button--secondary" data-action="reset-ask">Forget this phone</button>'}
       </section>` : ''}`,
   };
 }
