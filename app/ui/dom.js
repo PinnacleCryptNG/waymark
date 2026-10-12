@@ -10,10 +10,10 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ESC[c]);
 export const dual = (visible, spoken) =>
   `<span aria-hidden="true">${esc(visible)}</span><span class="sr-only">${esc(spoken)}</span>`;
 
-export const money = (kobo) => dual(formatNaira(kobo), spokenNaira(kobo));
+export const money = (kobo) => `<span class="amt">${dual(formatNaira(kobo), spokenNaira(kobo))}</span>`;
 
 export const signedMoney = (direction, kobo) =>
-  dual(`${direction === 'debit' ? '−' : '+'}${formatNaira(kobo)}`, spokenDirectionAmount(direction, kobo));
+  `<span class="amt">${dual(`${direction === 'debit' ? '−' : '+'}${formatNaira(kobo)}`, spokenDirectionAmount(direction, kobo))}</span>`;
 
 /** Polite announcement for in-place changes that do not move focus. */
 export function announce(message) {
@@ -30,7 +30,8 @@ export function focusElement(el) {
     el.setAttribute('tabindex', '-1');
   }
   el.focus({ preventScroll: true });
-  el.scrollIntoView({ block: 'center', behavior: 'auto' });
+  // Scroll only as far as needed, so a page that already shows the element does not jump.
+  el.scrollIntoView({ block: 'nearest', behavior: 'auto' });
 }
 
 /** Error summary at the top of a form. Each entry is { field, message }. */

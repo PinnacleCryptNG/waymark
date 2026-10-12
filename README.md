@@ -164,12 +164,16 @@ docs/       PRD and review (Word)
 The design system is described in [docs/DESIGN.md](docs/DESIGN.md). In short:
 
 - **Identity:** a waymark yellow "blaze" on deep green.
-- **Type:** Atkinson Hyperlegible, a typeface made for low-vision readers.
+- **Type:** Bricolage Grotesque for headlines and large amounts, and Atkinson Hyperlegible, a typeface
+  made for low-vision readers, for reading text.
+- **Background:** a trail-map contour background, drifting slowly on the start page.
+- **Start page:** "Banking you can hear." explains the product in about three seconds, while the top of
+  the page stays one big tap-to-talk target.
 - **Layout:** rows on rules instead of stacks of cards, and a yellow-and-dark focus ring.
 - **Talk button:** each state (listening, speaking, working, waiting for a fingerprint) has its own shape as
   well as its own words.
 
-The font is self-hosted under the SIL Open Font License (`app/fonts/OFL.txt`).
+Both fonts are self-hosted under the SIL Open Font License (`app/fonts/OFL.txt`, `app/fonts/OFL-bricolage.txt`).
 
 ## How it behaves
 

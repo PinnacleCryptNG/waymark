@@ -61,23 +61,15 @@ const payeeButtons = (beneficiaries) => `<ul class="choice-list">
 export function welcome(state) {
   const quick = state.biometric.available && state.biometric.credentialId;
   return {
-    title: 'Welcome',
-    layout: 'hero',
-    html: `<div class="hero">
-      <p class="eyebrow">Accessible banking demo</p>
-      ${h1('WAYMARK')}
+    title: 'Use the screens',
+    html: `<p class="kicker">Screens and screen readers</p>
+      ${h1('Use WAYMARK with the screens')}
       ${errorSummary(state.ui.errors)}
-      <p class="lede hero__lede">Pay anyone, and hear exactly who you are paying, without asking someone to read your screen.</p>
+      <p class="intro">Works with TalkBack and VoiceOver. Sign-in takes three short steps, and you approve payments with your fingerprint.</p>
       <div class="actions">
-        ${quick ? '<button type="button" class="button" id="bio-signin" data-action="biometric-signin">Sign in with fingerprint</button>' : ''}
+        ${quick ? `<button type="button" class="button" id="bio-signin" data-action="biometric-signin">${icon('fingerprint')}<span>Sign in with fingerprint</span></button>` : ''}
         <a class="button${quick ? ' button--secondary' : ''}" href="#signin">${quick ? 'Sign in another way' : 'Start the demo'}</a>
       </div>
-      </div>
-      <ul class="features" aria-label="What WAYMARK does">
-        <li>${icon('ear', 'icon features__icon')}<span><strong>Hear who you pay.</strong> The account name is read back, with a warning for lookalikes, before any money moves.</span></li>
-        <li>${icon('fingerprint', 'icon features__icon')}<span><strong>Approve with a touch.</strong> Your fingerprint approves payments, so nothing secret is spoken or typed.</span></li>
-        <li>${icon('mic', 'icon features__icon')}<span><strong>Talk instead of tapping.</strong> WAYMARK speaks for itself, from sign-up onwards. No screen reader needed.</span></li>
-      </ul>
       <section class="notice" aria-labelledby="demo-h">
         <h2 id="demo-h">This is a demo</h2>
         <ul>
@@ -87,7 +79,7 @@ export function welcome(state) {
           <li>This is an independent prototype for Zecathon 6.0. It is not a Zenith Bank service.</li>
         </ul>
       </section>
-      <p><a href="#help">Help</a></p>`,
+      <p class="back-link"><a href="#welcome">${icon('back')}<span>Back to talking</span></a></p>`,
   };
 }
 
@@ -95,9 +87,10 @@ export function signin(state) {
   const errs = state.ui.errors;
   return {
     title: 'Sign in to the demo',
-    html: `${h1('Sign in to the demo')}
+    html: `${steps(1)}
+      ${h1('Sign in to the demo')}
       ${errorSummary(errs)}
-      ${steps(1)}
+      <p class="intro">Three short steps. Nothing you enter is stored.</p>
       <form data-form="phone" novalidate>
         ${textField({ id: 'phone', label: 'Mobile number', hint: 'Any Nigerian mobile number works in this demo, for example 0803 123 4567. It is not stored or sent anywhere.', error: errorFor(errs, 'phone'), value: state.form.phone ?? '', type: 'tel', inputmode: 'tel' })}
         <button class="button" type="submit">Continue</button>
@@ -110,10 +103,10 @@ export function otp(state) {
   const last4 = String(state.form.phoneNumber ?? '').slice(-4);
   return {
     title: 'Enter your code',
-    html: `${h1('Enter your code')}
+    html: `${steps(2)}
+      ${h1('Enter your code')}
       ${errorSummary(errs)}
-      ${steps(2)}
-      <p>A real bank would text a code to your number ending ${dual(last4, last4.split('').join(' '))}. In this demo the code is ${dual(DEMO_OTP, DEMO_OTP.split('').join(' '))}, and it does not expire.</p>
+      <p class="intro">A real bank would text a code to your number ending ${dual(last4, last4.split('').join(' '))}. In this demo the code is ${dual(DEMO_OTP, DEMO_OTP.split('').join(' '))}, and it does not expire.</p>
       <form data-form="otp" novalidate>
         ${textField({ id: 'otp', label: 'Code', hint: '6 digits.', error: errorFor(errs, 'otp'), value: state.form.otp ?? '', inputmode: 'numeric' })}
         <button class="button" type="submit">Continue</button>
@@ -125,15 +118,16 @@ export function secure(state) {
   const available = state.biometric.available;
   return {
     title: 'Approve payments',
-    html: `${h1('How do you want to approve payments?')}
+    html: `${steps(3)}
+      ${h1('How do you want to approve payments?')}
       ${errorSummary(state.ui.errors)}
       ${available
-        ? `${steps(3)}<p>Your fingerprint is the fastest and most private way. One touch approves a payment, and nothing is spoken or typed, so nobody nearby can hear it.</p>
+        ? `<p class="intro">Your fingerprint is the fastest and most private way. One touch approves a payment, and nothing is spoken or typed, so nobody nearby can hear it.</p>
            <div class="actions">
              <button type="button" class="button" id="bio-setup" data-action="setup-biometric">${icon('fingerprint')}<span>Use my fingerprint</span></button>
              <a class="button button--secondary" href="#create-pin"><span>Use a ${PIN} instead</span></a>
            </div>`
-        : `${steps(3)}<p>This phone or browser cannot use a fingerprint here, so you will create a demo ${PIN} instead.</p>
+        : `<p class="intro">This phone or browser cannot use a fingerprint here, so you will create a demo ${PIN} instead.</p>
            <div class="actions"><a class="button" href="#create-pin"><span>Create a ${PIN}</span></a></div>`}`,
   };
 }
@@ -192,7 +186,7 @@ export function activityList(state) {
     title: 'Activity',
     nav: 'activity',
     html: `${h1('Activity')}
-      <p class="muted">${items.length} transactions, newest first. Select one for details.</p>
+      <p class="intro">${items.length} transactions, newest first. Select one for details.</p>
       ${items.length
         ? `<ol class="tx-list">${items.map(txItem).join('')}</ol>`
         : '<p>No activity yet. When you pay someone, it will appear here.</p><p><a href="#pay">Pay someone</a></p>'}`,
@@ -202,7 +196,7 @@ export function activityList(state) {
 export function txDetail(state, id) {
   const t = state.bankData.activity.find((x) => x.id === id);
   if (!t) {
-    return { title: 'Transaction not found', nav: 'activity', html: `${h1('Transaction not found')}<p>This transaction is not in your demo activity. It may have been removed by Reset demo.</p><p><a href="#activity">Back to activity</a></p>` };
+    return { title: 'Transaction not found', nav: 'activity', html: `${h1('Transaction not found')}<p>This transaction is not in your demo activity. It may have been removed by Reset demo.</p><p class="back-link"><a href="#activity">${icon('back')}<span>Back to activity</span></a></p>` };
   }
   return {
     title: t.description,
@@ -219,7 +213,7 @@ export function txDetail(state, id) {
       </dl>
       ${t.status === 'unknown' || t.status === 'pending'
         ? `<p class="warning">This transfer is not final yet. Do not send it again. <a href="#outcome/${esc(t.transferId)}">Check its status</a>.</p>` : ''}
-      <p><a href="#activity">Back to activity</a></p>`,
+      <p class="back-link"><a href="#activity">${icon('back')}<span>Back to activity</span></a></p>`,
   };
 }
 
@@ -230,6 +224,7 @@ export function pay(state) {
     title: 'Pay someone',
     nav: 'pay',
     html: `${h1('Pay someone')}
+      <p class="intro">Choose someone you have paid before, or pay a new account number.</p>
       <h2 class="list-heading">Saved people</h2>
       ${payeeButtons(state.bankData.beneficiaries)}
       <h2 class="list-heading">Someone new</h2>
@@ -276,7 +271,7 @@ export function payNew(state) {
         <button class="button" type="submit" ${L.loading ? 'disabled' : ''}>${L.loading ? 'Looking up account…' : 'Find account'}</button>
       </form>
       ${result}
-      <p><a href="#pay">Back</a></p>`,
+      <p class="back-link"><a href="#pay">${icon('back')}<span>Back</span></a></p>`,
   };
 }
 
@@ -293,7 +288,7 @@ export function amount(state) {
         <button class="button" type="submit">Review transfer</button>
         ${textField({ id: 'note', label: 'Note for the recipient', hint: 'Up to 30 characters.', error: errorFor(errs, 'note'), value: state.flow.note ?? '', required: false })}
       </form>
-      <p><button type="button" class="link" data-action="cancel-transfer">Cancel transfer</button></p>`,
+      <p class="back-link"><button type="button" class="link" data-action="cancel-transfer">${icon('cross')}<span>Cancel transfer</span></button></p>`,
   };
 }
 
@@ -424,29 +419,104 @@ export function talk(state) {
   const status = !canListen
     ? 'This browser cannot listen. Use Chrome on Android, or type below.'
     : state.voice.status ?? TALK_STATUS.ready;
-  return {
-    title: 'Talk',
-    nav: 'voice',
-    layout: 'talk',
-    focus: '#talk-btn',
-    html: `<h1 id="page-title" tabindex="-1" class="talk-title">WAYMARK</h1>
-      <button type="button" id="talk-btn" class="talk-target" data-state="${talkState(status)}">
+  const privacy = AI_ENDPOINT
+    ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Your balance and saved payees stay on this phone.'
+    : 'In Chrome, your speech is sent to Google to turn it into text.';
+  const target = `<button type="button" id="talk-btn" class="talk-target" data-state="${talkState(status)}">
         <span class="talk-target__icon" aria-hidden="true">${icon('mic', 'icon talk-icon talk-icon--mic')}${icon('fingerprint', 'icon talk-icon talk-icon--fingerprint')}<span class="talk-bars"><i></i><i></i><i></i><i></i></span></span>
         <span class="talk-target__label">Tap anywhere to talk</span>
         <span class="talk-target__status" id="talk-status" aria-hidden="true">${esc(status)}</span>
-      </button>
-      <div class="talk-foot">
-      <p class="talk-note">Demo only. No real money moves. ${AI_ENDPOINT ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Your balance and saved payees stay on this phone.' : 'In Chrome, your speech is sent to Google to turn it into text.'}</p>
-      <p class="talk-switch"><a href="${state.signedIn ? '#home' : '#start'}">Use the screens instead</a></p>
-      </div>
-      <details class="talk-more">
+      </button>`;
+  const more = `<details class="talk-more">
         <summary>Conversation, and typing instead</summary>
         <ol class="voice-log" id="voice-log">${voiceLogHtml(state.voice.log)}</ol>
         <form data-form="talk-text" novalidate>
           ${textField({ id: 'talk-input', label: 'Type instead', required: false })}
           <button class="button button--secondary" type="submit">Send</button>
         </form>
-      </details>`,
+      </details>`;
+
+  if (state.signedIn) {
+    return {
+      title: 'Talk',
+      nav: 'voice',
+      layout: 'talk',
+      focus: '#talk-btn',
+      html: `<h1 id="page-title" tabindex="-1" class="sr-only">Talk to WAYMARK</h1>
+      ${target}
+      <div class="talk-foot">
+        <p class="talk-note">Demo only. No real money moves. ${privacy}</p>
+        <p class="talk-switch"><a href="#home">Use the screens instead</a></p>
+      </div>
+      ${more}`,
+    };
+  }
+
+  // Signed out: the start page. The top is one big target, so a blind visitor can simply tap;
+  // the rest explains the product to anyone who can see it.
+  return {
+    title: 'Banking you can hear',
+    nav: 'voice',
+    layout: 'landing',
+    focus: '#talk-btn',
+    html: `<section class="landing-hero" aria-labelledby="page-title">
+      <div class="landing-hero__inner">
+        <div class="landing-hero__copy">
+          <p class="kicker kicker--on-dark">Voice banking for blind and low-vision Nigerians</p>
+          <h1 id="page-title" tabindex="-1">Banking you can hear.</h1>
+          <p class="landing-hero__lede">Say who to pay. WAYMARK reads back their real name before any money moves. Your fingerprint sends it.</p>
+        </div>
+        ${target}
+        <div class="landing-hero__links">
+          <p class="talk-switch"><a href="#start">Use the screens instead</a></p>
+          <p class="talk-note">Demo only. No real money moves. ${privacy}</p>
+        </div>
+        <figure class="demo-phone" aria-hidden="true">
+          <div class="demo-phone__screen">
+            <p class="demo-phone__bar"><span>WAYMARK</span><span>Listening</span></p>
+            <p class="bubble bubble--you">“Send five thousand naira to Musa.”</p>
+            <p class="bubble bubble--waymark">Musa Ibrahim, Savanna Bank, ending 8 8 4 6. Fee 10 naira. Touch your fingerprint to send.</p>
+            <p class="bubble bubble--touch">${icon('fingerprint')}<span>Fingerprint approved</span></p>
+            <p class="bubble bubble--waymark">Done. 5,000 naira sent to Musa Ibrahim.</p>
+          </div>
+          <figcaption>What a payment sounds like</figcaption>
+        </figure>
+      </div>
+    </section>
+    <div class="landing-more">
+      <section class="landing-section" aria-labelledby="how-h">
+        <p class="kicker">How it works</p>
+        <h2 id="how-h" class="section-title">Three steps. No screen reader needed.</h2>
+        <ol class="steps-list">
+          <li><span class="steps-list__n" aria-hidden="true">1</span><div><h3>Say it</h3><p>Tap anywhere and say who to pay and how much, in Nigerian English or Pidgin.</p></div></li>
+          <li><span class="steps-list__n" aria-hidden="true">2</span><div><h3>Hear it back</h3><p>WAYMARK reads the account owner's real name, the fee and the total, and warns you about lookalike accounts.</p></div></li>
+          <li><span class="steps-list__n" aria-hidden="true">3</span><div><h3>Touch to send</h3><p>Your fingerprint approves it. Nothing is spoken aloud or typed, so nobody nearby learns your secrets.</p></div></li>
+        </ol>
+      </section>
+      <section class="landing-section" aria-labelledby="safe-h">
+        <p class="kicker">Safe by design</p>
+        <h2 id="safe-h" class="section-title">The AI listens. It never moves money.</h2>
+        <ul class="rules">
+          <li>${icon('shield', 'icon rules__icon')}<span><strong>“Yes” never sends.</strong> Every payment needs a tap and your fingerprint.</span></li>
+          <li>${icon('ear', 'icon rules__icon')}<span><strong>Read back from the bank.</strong> Names and amounts come from the bank, not from the AI.</span></li>
+          <li>${icon('warning', 'icon rules__icon')}<span><strong>Lookalike warnings.</strong> A similar name on a different account is called out before you pay.</span></li>
+          <li>${icon('clock', 'icon rules__icon')}<span><strong>Never pays twice.</strong> If the network drops, WAYMARK checks the status instead of sending again.</span></li>
+        </ul>
+      </section>
+      <section class="landing-section" aria-labelledby="who-h">
+        <p class="kicker">Who it is for</p>
+        <h2 id="who-h" class="section-title">Anyone who finds banking apps hard to see</h2>
+        <p class="intro">Blind and low-vision customers first, and anyone who would rather talk than tap. Large text, high contrast and screen readers work too.</p>
+      </section>
+    </div>
+    <section class="landing-cta" aria-labelledby="cta-h">
+      <div class="landing-cta__inner">
+        <h2 id="cta-h" class="section-title">Try it now</h2>
+        <p>Tap anywhere in this green band and WAYMARK will talk you through it. It is a demo: nothing here is real money.</p>
+        <p class="landing-cta__links"><a class="button button--on-dark" href="#start">Use the screens instead</a></p>
+      </div>
+    </section>
+    <div class="landing-tail">${more}</div>`,
   };
 }
 
@@ -457,6 +527,7 @@ export function help(state) {
     title: 'Help',
     nav: 'help',
     html: `${h1('Help')}
+      <p class="intro">How WAYMARK works, what each status means, and how to stay safe.</p>
       <section aria-labelledby="h-demo"><h2 id="h-demo">About this demo</h2>
         <p>WAYMARK is a prototype. Every name, account and amount is invented, and no real money moves. ${state.signedIn ? '' : '<a href="#welcome">Back to the start</a>.'}</p></section>
       <section aria-labelledby="h-approve"><h2 id="h-approve">Approving payments</h2>
@@ -489,7 +560,7 @@ export function settings(state) {
     title: 'Settings',
     nav: 'settings',
     html: `${h1('Settings')}
-      <p>Changes apply straight away and last for this session.</p>
+      <p class="intro">Changes apply straight away and last for this session.</p>
       <form data-form="settings" novalidate>
         <fieldset class="field"><legend>Text size</legend>
           ${sizes.map(([v, l]) => `<div class="radio"><input type="radio" name="textSize" id="size-${v}" value="${v}"${p.textSize === v ? ' checked' : ''}><label for="size-${v}">${l}</label></div>`).join('')}

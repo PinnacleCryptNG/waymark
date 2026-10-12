@@ -32,12 +32,12 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
 
   // J1 sign in
   await page.goto(BASE);
-  check('first screen is Talk', (await h1()) === 'WAYMARK' && (await page.locator('#talk-btn').count()) === 1);
+  check('first screen is the start page with the talk target', (await h1()) === 'Banking you can hear.' && (await page.locator('#talk-btn').count()) === 1);
   check('first screen focus on the talk target', (await focused()).startsWith('BUTTON#talk-btn'), await focused());
   await page.screenshot({ path: OUT + '00-talk.png', fullPage: true });
-  await page.getByRole('link', { name: 'Use the screens instead' }).click();
+  await page.getByRole('link', { name: 'Use the screens instead' }).first().click();
   await page.waitForFunction(() => location.hash === '#start');
-  check('screens start h1', (await h1()) === 'WAYMARK');
+  check('screens start h1', (await h1()) === 'Use WAYMARK with the screens');
   await page.screenshot({ path: OUT + '01-welcome.png', fullPage: true });
   await page.getByRole('link', { name: 'Start the demo' }).click();
   await at('Sign in to the demo');
@@ -220,7 +220,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
 
   // Refresh keeps ledger, requires sign-in
   await page.reload();
-  check('refresh requires sign-in', (await h1()) === 'WAYMARK');
+  check('refresh requires sign-in', (await h1()) === 'Banking you can hear.');
   check('no JS errors', errors.length === 0, errors.join(' || '));
 
   // Fingerprint journey, with Chrome's virtual authenticator standing in for the sensor
@@ -261,7 +261,7 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   check('fingerprint approves transfer', await fpAt('Transfer completed'));
   await fp.reload();
   await fp.goto(BASE + '#start');
-  await fpAt('WAYMARK');
+  await fpAt('Use WAYMARK with the screens');
   await fp.getByRole('button', { name: 'Sign in with fingerprint' }).click();
   check('one-touch sign-in on return', await fpAt('Home'));
   await ctx.close();
@@ -302,7 +302,8 @@ const check = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAI
   const tapAnywhere = () => vp.mouse.click(195, 400);
 
   await vp.goto(BASE);
-  check('voice: first screen is one big tap target', (await vp.locator('#talk-btn').boundingBox()).height > 400);
+  check('voice: first screen has one big tap target', (await vp.locator('#talk-btn').boundingBox()).height > 300);
+  check('voice: start page does not scroll the headline away', (await vp.evaluate(() => scrollY)) === 0);
   await say('zero eight zero three one two three four five six seven', 'one two three four five six');
   await tapAnywhere();
   check('voice: welcome spoken on first tap', await waitSaid('Welcome to WAYMARK'));

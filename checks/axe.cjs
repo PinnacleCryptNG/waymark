@@ -19,14 +19,14 @@ const BASE = process.env.BASE_URL || 'http://localhost:8080/';
     await page.goto(BASE + '#welcome');
     await page.evaluate(() => sessionStorage.clear());
     await page.reload();
-    await at('WAYMARK');
+    await at('Banking you can hear.');
     if (mode === 'high') {
       await page.goto(BASE + '#settings'); await at('Settings');
       await page.getByLabel('High contrast').check();
-      await page.goto(BASE + '#welcome'); await at('WAYMARK');
+      await page.goto(BASE + '#welcome'); await at('Banking you can hear.');
     }
-    await scan(`${mode}/talk-first-screen`);
-    await page.goto(BASE + '#start'); await at('WAYMARK');
+    await scan(`${mode}/start-page`);
+    await page.goto(BASE + '#start'); await at('Use WAYMARK with the screens');
     await scan(`${mode}/welcome`);
     await page.getByRole('link', { name: 'Start the demo' }).click(); await at('Sign in');
     await page.getByRole('button', { name: 'Continue' }).click();
@@ -64,7 +64,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:8080/';
     await page.getByLabel('Demo PIN').fill('2580');
     await page.getByRole('button', { name: 'Confirm transfer' }).click(); await at('We could not');
     await scan(`${mode}/outcome-unknown`);
-    await page.goto(BASE + '#talk'); await at('WAYMARK');
+    await page.goto(BASE + '#talk'); await at('Talk to WAYMARK');
     await page.getByText('Conversation, and typing instead').click();
     await page.getByLabel('Type instead').fill('what is my balance');
     await page.getByRole('button', { name: 'Send', exact: true }).click();

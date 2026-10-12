@@ -32,9 +32,18 @@ These are the patterns the design draws on:
   ink. Status colours are always paired with a word and a shape.
   - Every text colour meets WCAG AA. Body text and actions are at 7:1 or higher.
   - High contrast mode swaps the whole palette for black, white and yellow.
-- **Type:** Atkinson Hyperlegible, 18px body, self-hosted (about 35 KB).
-  - Its slashed zero and distinct I, l and 1 are deliberate. They matter most in account numbers and
-    references.
+- **Type:** two self-hosted faces (about 100 KB), each with one job:
+  - **Bricolage Grotesque** (700 and 800) for headlines and large amounts. It is confident and a little
+    irregular, so it does not look like a template, and its figures have no slashed zero.
+  - **Atkinson Hyperlegible** (400 and 700) for everything you read, at an 18px base. Its slashed zero
+    and distinct I, l and 1 matter most in account numbers and references.
+  - Page head pattern on every screen: a kicker (small capitals with a yellow dash, or the sign-in step
+    count), then the heading, then a one-line intro in muted text.
+- **Background:** the contour lines of a trail map (`app/img/contours.svg`, used as a mask so it takes any
+  colour).
+  - Behind every screen it is static, at 4.5% ink.
+  - On the green start page it is yellow at 16%, and drifts over 48 seconds.
+  - It is off in high contrast mode, and still when reduced motion is on.
 - **Shape:** small radii (4 to 6px). No gradients, glass or decorative shadows.
   - People and transactions are rows on a rule, not stacks of rounded cards.
 - **Imagery:** functional icons only (24px grid, 2px stroke). They are always hidden from screen readers
@@ -74,6 +83,22 @@ These are the patterns the design draws on:
 
   With reduced motion the rings stop moving but stay visible.
 - **Outcome band:** a coloured left rule, an icon disc, the status word, then the heading.
+
+## Start page
+
+The first screen does two jobs at once.
+
+- **For someone who cannot see it:** the top of the page is one big target. Tap anywhere and WAYMARK speaks.
+  The page never scrolls the headline away.
+- **For someone who can:** they understand it in about three seconds:
+  - the headline "Banking you can hear.";
+  - one sentence of explanation;
+  - a phone that plays a whole spoken payment in under four seconds.
+- **Below the top**, for reading rather than tapping:
+  - how it works (Say it, Hear it back, Touch to send);
+  - the safety rules;
+  - who it is for;
+  - a green "Try it now" band, where a tap starts talking again.
 
 ## Layout
 

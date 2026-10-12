@@ -127,6 +127,8 @@ function render() {
   const main = document.getElementById('main');
   main.innerHTML = screen.html;
   main.dataset.layout = screen.layout ?? '';
+  // Every screen opens at its top; focus then scrolls only if it must.
+  window.scrollTo(0, 0);
   document.title = `${screen.title} · WAYMARK demo`;
   updateNav(screen.nav);
 
@@ -626,7 +628,11 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.skip-link')) { e.preventDefault(); focusElement(document.getElementById('page-title') ?? main); return; }
   if (!['talk', 'welcome'].includes(parseRoute().name)) return;
   if (e.target.closest('a, input, select, textarea, summary, details, form, nav')) return;
+  // On the start page, the explanation below the fold is for reading, not tapping.
+  if (e.target.closest('.landing-more, .app-footer')) return;
   e.preventDefault();
+  // Tapping the "Try it now" band brings the big button back into view, so its state is visible.
+  if (e.target.closest('.landing-cta')) window.scrollTo({ top: 0 });
   talk.tap();
 });
 
@@ -684,6 +690,7 @@ main.addEventListener('change', (e) => {
 
 applyPrefs();
 state.biometric.available = await biometricAvailable();
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 if (!location.hash) history.replaceState(null, '', '#welcome');
 render();
 
