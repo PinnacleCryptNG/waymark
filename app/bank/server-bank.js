@@ -20,8 +20,13 @@ export function createServerBank({ base = '', getToken }) {
     listBeneficiaries: () => call('/api/beneficiaries'),
     lookupName: ({ bankCode, accountNumber }) => call('/api/name-enquiry', { method: 'POST', body: { bankCode, accountNumber } }),
     quoteTransfer: ({ amountKobo }) => call('/api/quote', { method: 'POST', body: { amountKobo } }),
-    submitTransfer: ({ idempotencyKey, payee, amountKobo, note, approvalToken }) =>
-      call('/api/transfers', { method: 'POST', body: { idempotencyKey, payee, amountKobo, note: note ?? '', approvalToken, behaviour } }),
+    submitTransfer: ({ idempotencyKey, payee, amountKobo, note, approvalToken }) => {
+      const sent = call('/api/transfers', { method: 'POST', body: { idempotencyKey, payee, amountKobo, note: note ?? '', approvalToken, behaviour } });
+      if (behaviour !== 'drop') return sent;
+      // Demo: the server completes the transfer, but the reply is lost on the way back.
+      sent.catch(() => {});
+      return new Promise(() => {});
+    },
     getTransferStatus: (id) => call(`/api/transfers/${encodeURIComponent(id)}`),
     /** Demo switch: make the next transfer decline or hold. */
     setBehaviour: (b) => { behaviour = b; },
