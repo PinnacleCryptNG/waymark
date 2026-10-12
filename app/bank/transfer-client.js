@@ -36,6 +36,7 @@ export async function sendTransfer(bank, attempt, { timeoutMs = CLIENT_TIMEOUT_M
     payee: attempt.payee,
     amountKobo: attempt.amountKobo,
     note: attempt.note,
+    approvalToken: attempt.approvalToken,
   }).catch(() => NETWORK_ERROR);
 
   const reply = await Promise.race([request, timeout]);

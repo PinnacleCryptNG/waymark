@@ -20,14 +20,24 @@ The full requirements are in the WAYMARK Master PRD v1.0 (`docs/WAYMARK-Master-P
 
 ## Run it
 
-Requires Node.js 18 or later. There is nothing to install.
+WAYMARK now has a server (`backend/`): accounts by phone number, secured by the user's voice. The server also serves the app, so one command runs everything.
+
+Requires Python 3.10+, ffmpeg and Node.js 18+ (for the unit tests).
 
 ```sh
-npm start          # serves the app at http://localhost:8080/
-npm test           # unit tests (node --test), no dependencies
+python3 -m venv backend-venv
+backend-venv/bin/pip install -r backend/requirements.txt
+cd backend && ../backend-venv/bin/uvicorn waymark_server.app:app --port 8080   # app + API at http://localhost:8080/
+
+npm test                                        # app unit tests (node --test)
+cd backend && ../backend-venv/bin/python -m pytest tests   # server tests
 ```
 
-Browsers do not load JavaScript modules from `file://`, so open the app through `npm start` (or any static server pointed at `app/`) rather than double-clicking `index.html`.
+The first voice check downloads two open models (about 300 MB) into `backend/models/`: SpeechBrain's ECAPA speaker model (is it the same voice?) and Whisper `base.en` (which numbers were said?). They run on a CPU; a voice check takes about a second.
+
+Settings (environment variables): `WAYMARK_DB` (SQLite file), `WAYMARK_VOICE_THRESHOLD` (default 0.45), `WAYMARK_ENROLL_THRESHOLD` (0.40), `WAYMARK_CORS_ORIGINS` (comma-separated, when the app is hosted elsewhere, such as GitHub Pages; then set `API_BASE` in `app/config.js`).
+
+`npm start` still serves `app/` on its own, but without the server nobody can sign in.
 
 To try it on a phone with TalkBack or VoiceOver, run `npm start` on a computer and open `http://<computer's LAN address>:8080/` on a phone on the same Wi-Fi. Or host the `app/` folder on any static host, such as GitHub Pages.
 
@@ -35,9 +45,9 @@ To try it on a phone with TalkBack or VoiceOver, run `npm start` on a computer a
 
 | Step | Value |
 | --- | --- |
-| Mobile number | Any Nigerian mobile number, for example 0803 123 4567 (not stored) |
-| Code | 123456 |
-| Approval | Your fingerprint (Android Chrome, iPhone Safari), or a 4-digit pin you choose |
+| Mobile number | Any Nigerian mobile number, for example 0803 123 4567. No code: the first person to register a number owns it |
+| Voice set-up | Say the 5 random numbers WAYMARK reads out, three times |
+| Sign-in and approval | Say 5 fresh random numbers; the server checks the voice and the numbers |
 | New account, plain | 0198765432 at Lagoon Bank (demo) → Chinedu Eze |
 | New account, lookalike warning | 5009988776 at Kola Microfinance (demo) → Adaeze Okafur |
 
@@ -115,12 +125,28 @@ screens (app/ui)  ──>  bank boundary (app/bank/bank-api.js)  ──>  DemoBa
 
 Going live means writing a second adapter with the same methods that calls the bank's authorised APIs (for example NIP name enquiry and payment initiation behind a server the bank approves). The screens and the transfer client do not change.
 
+## Voice security
+
+```
+sign up:  phone number ─> server picks 5 random digits ─> user says them (x3) ─> voiceprint saved
+sign in:  saved number ─> new random digits ─> user says them ─> server: right digits? same voice? ─> session
+pay:      bank figures read back ─> tap ─> new digits, tied to this payee, amount and transfer id ─> one-time approval ─> transfer
+```
+
+- The browser only records. The server decides: Whisper checks the digits (one slip in five is allowed), and the ECAPA speaker model compares the voice to the voiceprint (cosine similarity, threshold 0.45).
+- Random digits each time, used once and valid for 2 minutes, so replaying a recording of an earlier check does not work.
+- A payment approval only works for the exact transfer id, payee account and amount it was issued for, once, within 2 minutes. The server refuses transfers without one.
+- Five voice sign-ins that do not match lock the account for 15 minutes. Sessions last 30 minutes.
+- The server keeps the voiceprint (an average of speaker embeddings), not the recordings.
+- Checked with synthetic voices only so far: four different text-to-speech voices scored 0.69–0.77 against themselves and 0.11–0.39 against each other. Real voices on real phone microphones still need testing, and the threshold may need tuning.
+- Limits: no code at sign-up means whoever registers a number first owns it, and a good AI copy of someone's voice may pass. A real bank would add an SMS code at sign-up, liveness detection and a second factor for large payments.
+
 ## Voice architecture
 
 ```
 Tap anywhere ─> WAYMARK speaks (speechSynthesis) ─> tone ─> listens (browser speech-to-text)
       │                                                         ▼
-      │                          assistant.js: sign-up (phone, code, fingerprint), sign-in, payments
+      │                          assistant.js: sign-up (phone, voice), voice sign-in, payments  
       │                                 │  interpreter.js reads the words
       │                                 │    today: rules in intent.js, on the phone
       │                                 │    or:    Gemini, via server/gemini-worker.js (holds the key)
@@ -128,7 +154,7 @@ Tap anywhere ─> WAYMARK speaks (speechSynthesis) ─> tone ─> listens (brows
       │                          dialog.js decides what to say: answer, ask for the amount or bank,
       │                          read back the owner, or read the payment summary. It never sends money.
       ▼
-Tap anywhere + fingerprint ─> bank boundary ─> outcome spoken from the bank's own figures
+Tap anywhere + voice check ─> bank boundary ─> outcome spoken from the bank's own figures
 ```
 
 ui/talk.js handles turn-taking: WAYMARK never listens while it is talking, and a tap stops either at once.
@@ -185,11 +211,11 @@ Both fonts are self-hosted under the SIL Open Font License (`app/fonts/OFL.txt`,
 
 ## Known limits
 
-- No real authentication, KYC, liveness check or device binding. Sign-in is simulated.
-- No server: limits, fraud checks and idempotency would need to be enforced server-side in production.
+- Voice sign-in has only been tested with synthetic voices. No KYC, device binding or SMS check of the phone number.
+- The server is a prototype (SQLite, one process). Limits and fraud checks are not built yet.
 - English only. Yoruba, Hausa, Igbo and Pidgin depend on the phone's text-to-speech voices and need research first.
 - Manual screen-reader testing and user research have not been done yet (see the table above).
 
 ## Everything that is simulated
 
-Sign-in, the one-time code, the pin, server-side verification of the fingerprint, the account directory and name enquiry, bank names, balances, transaction history, transfer processing, transfer outcomes and status checks.
+The account directory and name enquiry, bank names, balances, transaction history, transfer processing, transfer outcomes and status checks.

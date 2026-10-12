@@ -1,6 +1,6 @@
 // Drives a spoken conversation with the assistant: speak, then listen, then speak again,
 // with no swiping and no screen reader needed. One tap anywhere starts, interrupts,
-// or (when asked) approves with a fingerprint.
+// or (when asked) starts a voice check: WAYMARK says some numbers, then records them being said.
 //
 // Turn-taking: WAYMARK never listens while it is talking, so it does not hear itself.
 // A tap always wins: it stops speech or listening at once and moves on.
@@ -13,16 +13,19 @@ export const TALK_STATUS = {
   listening: 'Listening… speak now',
   speaking: 'Speaking. Tap to interrupt.',
   working: 'One moment…',
-  tap: 'Tap anywhere, then confirm with your fingerprint, face or phone PIN',
+  tap: 'Tap anywhere, then say the numbers',
+  recording: 'Recording… say the numbers now',
+  checking: 'Checking your voice…',
 };
 
 /**
  * deps: { assistant: () => assistant, speak(text) -> Promise, stopSpeaking(), startListening() -> { done, abort },
- *         tone(kind), vibrate(ms), log(who, text), status(text) }
+ *         record() -> { done, abort }, tone(kind), vibrate(ms), log(who, text), status(text) }
  */
 export function createTalkDriver(deps) {
   let generation = 0;
   let listening = null;
+  let recording = null;
 
   const current = (g) => g === generation;
 
@@ -58,11 +61,28 @@ export function createTalkDriver(deps) {
     await run({ say: RECOGNITION_MESSAGES[heard.reason] ?? "Sorry, I couldn't listen just now. Tap anywhere to try again.", then: 'idle' }, g);
   }
 
+  /** Record a clip for the voice check (no speech-to-text in the browser: the server checks it). */
+  async function record(g) {
+    if (!current(g)) return;
+    deps.status(TALK_STATUS.recording);
+    deps.tone('start');
+    deps.vibrate(40);
+    recording = deps.record();
+    const clip = await recording.done;
+    recording = null;
+    if (!current(g) || clip.reason === 'aborted') return;
+    deps.tone(clip.ok ? 'stop' : 'error');
+    if (clip.ok) deps.log('you', '(voice sample recorded)');
+    deps.status(TALK_STATUS.checking);
+    await run(await deps.assistant().recorded(clip), g);
+  }
+
   async function run(result, g, { autoListen = true } = {}) {
     if (!current(g)) return;
     if (!result) { if (autoListen) await listen(g); else rest(); return; }
     await say(result.say);
     if (!current(g)) return;
+    if (result.then === 'record') { await record(g); return; }
     if (result.then === 'listen' && autoListen) { await listen(g); return; }
     rest();
   }
@@ -73,11 +93,13 @@ export function createTalkDriver(deps) {
     deps.stopSpeaking();
     listening?.abort();
     listening = null;
+    recording?.abort();
+    recording = null;
     return generation;
   }
 
   return {
-    /** A tap anywhere on the Talk screen. Must be called straight from the click (fingerprint needs it). */
+    /** A tap anywhere on the Talk screen. Called straight from the click, so audio can start. */
     async tap() {
       const g = interrupt();
       const a = deps.assistant();

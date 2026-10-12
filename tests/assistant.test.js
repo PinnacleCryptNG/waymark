@@ -1,4 +1,4 @@
-// The voice assistant end to end, with stand-ins for the fingerprint sensor and screens.
+// The voice assistant end to end, with stand-ins for the WAYMARK server's voice checks and the screens.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAssistant, extractDigits } from '../app/voice/assistant.js';
@@ -7,12 +7,42 @@ import { createDemoBank, BEHAVIOURS } from '../app/bank/demo-bank.js';
 import { sendTransfer, checkTransfer } from '../app/bank/transfer-client.js';
 import { BANKS } from '../app/data/seed.js';
 
-function setup({ fingerprint = true, fingerprintWorks = true, signedIn = false, credential = null, authMethod = null } = {}) {
+const CLIP = { ok: true, audio: 'clip' };
+
+/** Stand-in for voice-auth.js. `voice` decides what the next voice check says. */
+function fakeAuth({ registered = false, savedPhone = null } = {}) {
+  const f = { voice: 'match', heard: '47291', phone: savedPhone, samples: 0, approvals: [], challenges: [], locked: false };
+  f.api = {
+    savedPhone: () => f.phone,
+    forget: () => { f.phone = null; },
+    async start(phone) { f.phone = phone; return { ok: true, phone, status: registered ? 'active' : 'enrolling', samplesNeeded: 3 }; },
+    async challenge(body) {
+      if (f.locked) return { ok: false, code: 'locked' };
+      f.challenges.push(body);
+      return { ok: true, challengeId: `c${f.challenges.length}`, digits: '47291' };
+    },
+    async enroll() {
+      if (f.voice === 'wrong-digits') return { ok: false, code: 'wrong-digits', heard: '4729' };
+      if (f.voice !== 'match') return { ok: false, code: 'different-voice' };
+      f.samples += 1;
+      return f.samples < 3 ? { ok: true, done: false, samples: f.samples, samplesNeeded: 3 } : { ok: true, done: true, token: 't' };
+    },
+    async login() { return f.voice === 'match' ? { ok: true, token: 't' } : { ok: false, code: 'voice-mismatch' }; },
+    async approve() {
+      if (f.voice !== 'match') return { ok: false, code: 'voice-mismatch' };
+      f.approvals.push('a1');
+      return { ok: true, approvalToken: 'a1' };
+    },
+  };
+  return f;
+}
+
+function setup({ signedIn = false, canRecord = true, registered = false, savedPhone = null } = {}) {
   const bank = createDemoBank({ speed: 0 });
   const data = { account: null, activity: [], beneficiaries: [] };
-  const session = { signedIn, authMethod };
-  const log = { progress: [], screens: 0, review: null };
-  let cred = credential;
+  const session = { signedIn };
+  const log = { progress: [], screens: 0, sent: [] };
+  const auth = fakeAuth({ registered, savedPhone });
   const refresh = async () => {
     const [account, activity, beneficiaries] = await Promise.all([bank.getAccount(), bank.listActivity(), bank.listBeneficiaries()]);
     Object.assign(data, { account, activity, beneficiaries });
@@ -21,25 +51,22 @@ function setup({ fingerprint = true, fingerprintWorks = true, signedIn = false, 
     interpreter: createRuleInterpreter(),
     bank,
     banks: BANKS,
-    biometric: {
-      available: fingerprint,
-      register: async () => (fingerprintWorks ? { ok: true, credentialId: 'cred-1' } : { ok: false, reason: 'cancelled' }),
-      verify: async () => (fingerprintWorks ? { ok: true } : { ok: false, reason: 'cancelled' }),
-    },
-    credential: { get: () => cred, save: (id) => { cred = id; } },
+    auth: auth.api,
+    canRecord,
     session: {
       signedIn: () => session.signedIn,
-      authMethod: () => session.authMethod,
-      signIn: async (method) => { session.signedIn = true; session.authMethod = method; await refresh(); },
+      signIn: async () => { session.signedIn = true; await refresh(); },
       refresh,
       context: () => ({ beneficiaries: data.beneficiaries, banks: BANKS, balanceKobo: data.account?.balanceKobo ?? 0, activity: data.activity }),
     },
-    transfers: { send: (p) => sendTransfer(bank, p, { timeoutMs: 50, slowMs: 10 }), check: (x) => checkTransfer(bank, x) },
+    transfers: {
+      send: (p) => { log.sent.push(p); return sendTransfer(bank, p, { timeoutMs: 50, slowMs: 10 }); },
+      check: (x) => checkTransfer(bank, x),
+    },
     progress: async (t) => { log.progress.push(t); },
     switchToScreens: () => { log.screens += 1; },
-    openReview: (payee, amountKobo) => { log.review = { payee, amountKobo }; },
   });
-  return { a, bank, data, session, log, refresh, cred: () => cred };
+  return { a, bank, data, session, log, refresh, auth };
 }
 
 test('digits are read from speech in every common form', () => {
@@ -50,8 +77,8 @@ test('digits are read from speech in every common form', () => {
   assert.equal(extractDigits('triple 5'), '555');
 });
 
-test('sign-up by voice: phone, code, fingerprint, then ready', async () => {
-  const { a, cred, session } = setup();
+test('sign-up by voice: phone number with no code, then three voice samples, then ready', async () => {
+  const { a, session, auth } = setup();
   let r = await a.begin();
   assert.match(r.say, /Welcome to WAYMARK/);
   assert.match(r.say, /Say your mobile number/);
@@ -61,51 +88,86 @@ test('sign-up by voice: phone, code, fingerprint, then ready', async () => {
   assert.match(r.say, /not a Nigerian mobile number/);
 
   r = await a.hear('zero eight zero three one two three four five six seven');
-  assert.match(r.say, /ending 4 5 6 7/);
-  assert.match(r.say, /the code is 1 2 3 4 5 6/);
+  assert.match(r.say, /ending 4 5 6 7 is set up/);
+  assert.match(r.say, /learn your voice/);
+  assert.match(r.say, /After the tone, say: 4, 7, 2, 9, 1\.$/);
+  assert.equal(r.then, 'record');
+  assert.equal(auth.phone, '08031234567');
 
-  r = await a.hear('one two three four five six');
-  assert.match(r.say, /Tap anywhere on the screen, then confirm with your phone lock/);
-  assert.equal(a.wantsTap(), true);
-
-  r = await a.tapped();
-  assert.match(r.say, /You're all set\. Your demo balance is 245,800 naira/);
+  r = await a.recorded(CLIP);
+  assert.match(r.say, /^Got it\. Two more\./);
+  r = await a.recorded(CLIP);
+  assert.match(r.say, /^Got it\. One more\./);
+  r = await a.recorded(CLIP);
+  assert.match(r.say, /Your voice is saved/);
+  assert.match(r.say, /Your demo balance is 245,800 naira/);
+  assert.equal(r.then, 'listen');
   assert.equal(session.signedIn, true);
-  assert.equal(session.authMethod, 'biometric');
-  assert.equal(cred(), 'cred-1');
 });
 
-test('returning user signs in with one tap and a fingerprint', async () => {
-  const { a } = setup({ credential: 'cred-1' });
-  let r = await a.begin();
-  assert.match(r.say, /Welcome back/);
-  r = await a.tapped();
-  assert.match(r.say, /You're signed in\. What would you like to do\?/);
-});
-
-test('no fingerprint on this phone: voice sends the user to the screens', async () => {
-  const { a, log } = setup({ fingerprint: false });
+test('sign-up: wrong digits or a different voice asks again with fresh numbers', async () => {
+  const { a, auth } = setup();
   await a.begin();
   await a.hear('08031234567');
-  let r = await a.hear('123456');
-  assert.match(r.say, /has no screen lock WAYMARK can use/);
-  r = await a.hear('screens');
-  assert.equal(log.screens, 1);
+  auth.voice = 'wrong-digits';
+  let r = await a.recorded(CLIP);
+  assert.match(r.say, /I heard 4, 7, 2, 9\. Let's try that again\. After the tone/);
+  auth.voice = 'other';
+  r = await a.recorded(CLIP);
+  assert.match(r.say, /different voice/);
+  assert.equal(r.then, 'record');
+  assert.equal(auth.challenges.length, 3);
+});
+
+test('a number that already has an account signs in by voice', async () => {
+  const { a, session } = setup({ registered: true });
+  await a.begin();
+  let r = await a.hear('08031234567');
+  assert.match(r.say, /already has a WAYMARK account/);
+  assert.equal(r.then, 'record');
+  r = await a.recorded(CLIP);
+  assert.match(r.say, /You're signed in\. What would you like to do\?/);
+  assert.equal(session.signedIn, true);
+});
+
+test('returning user: straight to the voice check, and another voice is refused', async () => {
+  const { a, auth, session } = setup({ savedPhone: '08031234567' });
+  let r = await a.begin();
+  assert.match(r.say, /Welcome back/);
+  assert.equal(r.then, 'record');
+  auth.voice = 'other';
+  r = await a.recorded(CLIP);
+  assert.match(r.say, /did not match this account/);
+  assert.equal(session.signedIn, false);
+  auth.locked = true;
+  auth.voice = 'match';
+  // After too many misses the server locks the account.
+  const locked = setup({ savedPhone: '08031234567' });
+  locked.auth.locked = true;
+  r = await locked.a.begin();
+  assert.match(r.say, /locked for 15 minutes/);
+  assert.equal(r.then, 'idle');
+});
+
+test('no microphone recording in this browser: explains, never signs in', async () => {
+  const { a } = setup({ canRecord: false });
+  const r = await a.begin();
+  assert.match(r.say, /cannot record/);
+  assert.equal(r.then, 'idle');
 });
 
 async function signedIn(opts) {
   const ctx = setup(opts);
   await ctx.a.begin();
   await ctx.a.hear('08031234567');
-  await ctx.a.hear('123456');
-  await ctx.a.tapped();
+  for (let i = 0; i < 3; i++) await ctx.a.recorded(CLIP);
   return ctx;
 }
 
-test('pay a saved person entirely by voice: summary from bank figures, tap and fingerprint to send', async () => {
-  const { a, data } = await signedIn();
+test('pay a saved person entirely by voice: summary from bank figures, tap and voice check to send', async () => {
+  const { a, data, auth, log } = await signedIn();
   let r = await a.hear('send 500 naira to Musa');
-  assert.equal(r.say, "Send 500 naira to Musa Ibrahim, Savanna Bank (demo), account ending 8 8 4 6. The fee is 10 naira, so 510 naira in total. To send it, tap anywhere on the screen, then confirm with your phone lock: fingerprint, face or PIN. To stop, say cancel.");
+  assert.equal(r.say, 'Send 500 naira to Musa Ibrahim, Savanna Bank (demo), account ending 8 8 4 6. The fee is 10 naira, so 510 naira in total. To send it, tap anywhere on the screen and say the numbers I give you. To stop, say cancel.');
   assert.equal(a.wantsTap(), true);
 
   r = await a.hear('yes');
@@ -113,12 +175,21 @@ test('pay a saved person entirely by voice: summary from bank figures, tap and f
   assert.equal(data.account.balanceKobo, 24580000);
 
   r = await a.tapped();
+  assert.equal(r.say, 'After the tone, say: 4, 7, 2, 9, 1.');
+  assert.equal(r.then, 'record');
+  const ch = auth.challenges.at(-1);
+  assert.equal(ch.purpose, 'approve');
+  assert.equal(ch.amountKobo, 50000);
+  assert.equal(ch.payee.accountNumber, '2203918846');
+
+  r = await a.recorded(CLIP);
   assert.match(r.say, /^Done\. 500 naira sent to Musa Ibrahim\. Reference W M/);
   assert.match(r.say, /Your balance is now 245,290 naira/);
   assert.equal(data.account.balanceKobo, 24580000 - 51000);
+  assert.equal(log.sent[0].approvalToken, 'a1');
 });
 
-test('cancel before the fingerprint sends nothing', async () => {
+test('cancel before the voice check sends nothing', async () => {
   const { a, data } = await signedIn();
   await a.hear('send 500 to Musa');
   const r = await a.hear('cancel');
@@ -127,35 +198,37 @@ test('cancel before the fingerprint sends nothing', async () => {
   assert.equal(a.wantsTap(), false);
 });
 
-test('a failed fingerprint sends nothing', async () => {
-  const ctx = await signedIn();
-  await ctx.a.hear('send 500 to Musa');
-  // Swap in a sensor that refuses.
-  const refusing = setup({ fingerprintWorks: false, signedIn: true, authMethod: 'biometric', credential: 'cred-1' });
-  await refusing.refresh();
-  await refusing.a.begin();
-  await refusing.a.hear('send 500 to Musa');
-  const r = await refusing.a.tapped();
-  assert.match(r.say, /Not confirmed\. Nothing was sent/);
-  assert.equal(refusing.data.account.balanceKobo, 24580000);
+test('a voice that does not match sends nothing', async () => {
+  const { a, data, auth, log } = await signedIn();
+  await a.hear('send 500 to Musa');
+  await a.tapped();
+  auth.voice = 'other';
+  const r = await a.recorded(CLIP);
+  assert.match(r.say, /did not match this account\. Nothing was sent\. Tap anywhere to try again/);
+  assert.equal(r.then, 'idle');
+  assert.equal(log.sent.length, 0);
+  assert.equal(data.account.balanceKobo, 24580000);
+  assert.equal(a.wantsTap(), true);
 });
 
-test('new account by voice: owner read back, yes, then tap and fingerprint', async () => {
+test('new account by voice: owner read back, yes, then tap and voice check', async () => {
   const { a, log } = await signedIn();
   let r = await a.hear('pay 0198765432 at Lagoon bank 2000 naira');
-  assert.deepEqual(log.progress, ['Looking up the account.']);
+  assert.deepEqual(log.progress.slice(-1), ['Looking up the account.']);
   assert.match(r.say, /That account belongs to Chinedu Eze/);
   r = await a.hear('yes');
   assert.match(r.say, /^Send 2,000 naira to Chinedu Eze, Lagoon Bank \(demo\), account ending 5 4 3 2/);
-  r = await a.tapped();
+  await a.tapped();
+  r = await a.recorded(CLIP);
   assert.match(r.say, /^Done\. 2,000 naira sent to Chinedu Eze/);
 });
 
 test('connection drop: unknown outcome, then status check finds it completed', async () => {
   const { a, bank } = await signedIn();
   await a.hear('send 500 to Musa');
+  await a.tapped();
   bank.setBehaviour(BEHAVIOURS.DROP);
-  let r = await a.tapped();
+  let r = await a.recorded(CLIP);
   assert.match(r.say, /I could not confirm whether it went through\. It may already have gone\. Do not send it again/);
   bank.setBehaviour(BEHAVIOURS.NORMAL);
   r = await a.hear('check status');
@@ -175,11 +248,14 @@ test('repeat, stop and silence', async () => {
   assert.equal(r.then, 'idle');
 });
 
-test('pin users are handed to the Review screen', async () => {
-  const ctx = setup({ signedIn: true, authMethod: 'pin' });
-  await ctx.refresh();
-  await ctx.a.begin();
-  const r = await ctx.a.hear('send 500 to Musa');
-  assert.match(r.say, /Opening the review screen/);
-  assert.equal(ctx.log.review.amountKobo, 50000);
+test('no speech in a recording asks again without calling the server', async () => {
+  const { a, auth } = setup({ savedPhone: '08031234567' });
+  await a.begin();
+  const r = await a.recorded({ ok: false, reason: 'no-speech' });
+  assert.match(r.say, /^I didn't hear you\. After the tone, say/);
+  assert.equal(r.then, 'record');
+  const again = await a.recorded({ ok: false, reason: 'no-speech' });
+  assert.match(again.say, /Tap anywhere when you are ready/);
+  assert.equal(again.then, 'idle', 'stops recording after two quiet tries');
+  assert.equal(auth.challenges.length, 1);
 });

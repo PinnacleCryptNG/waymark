@@ -2,7 +2,10 @@
 // All banking goes through `bank` (see bank/bank-api.js). Screens render from a local
 // cache (state.bankData) that is refreshed from the bank after anything changes.
 
-import { createDemoBank, BEHAVIOURS } from '../bank/demo-bank.js';
+import { BEHAVIOURS } from '../bank/demo-bank.js';
+import { createServerBank } from '../bank/server-bank.js';
+import { createVoiceAuth } from '../voice/voice-auth.js';
+import { recordClip, recordingSupported } from '../voice/recorder.js';
 import { assertBank } from '../bank/bank-api.js';
 import { sendTransfer, checkTransfer, attemptFromStatus } from '../bank/transfer-client.js';
 import { STATES, createTransfer, transition } from '../domain/transfer.js';
@@ -20,13 +23,15 @@ import { prefsStore, bankStorage, credentialStore, DEFAULT_PREFS } from './store
 import { biometricAvailable, registerBiometric, verifyBiometric } from './biometric.js';
 import { createRuleInterpreter } from '../voice/interpreter.js';
 import { createGeminiInterpreter } from '../voice/gemini-interpreter.js';
-import { AI_ENDPOINT } from '../config.js';
+import { AI_ENDPOINT, API_BASE } from '../config.js';
 import { createAssistant } from '../voice/assistant.js';
 import { speak, stopSpeaking, startListening, tone } from '../voice/speech.js';
 import { createTalkDriver } from './talk.js';
 import { playOutcome } from './haptics.js';
 
-const bank = assertBank(createDemoBank({ storage: bankStorage }));
+// Accounts live on the WAYMARK server. Signing in is by voice; the session token is kept for this tab only.
+const auth = createVoiceAuth({ base: API_BASE });
+const bank = assertBank(createServerBank({ base: API_BASE, getToken: auth.token }));
 // Gemini reads what was said when its server is set up (config.js); otherwise the built-in rules do.
 const reader = AI_ENDPOINT ? createGeminiInterpreter({ endpoint: AI_ENDPOINT }) : createRuleInterpreter();
 // Note on the conversation which reader understood each sentence, so it is easy to see Gemini at work.
@@ -104,6 +109,8 @@ function guard({ name }) {
   if (!name) return state.signedIn ? 'home' : 'welcome';
   if (!state.signedIn && !PUBLIC.has(name)) return 'welcome';
   if (state.signedIn && ['welcome', 'start', 'signin', 'otp', 'secure', 'create-pin'].includes(name)) return 'home';
+  // Signing up and signing in are by voice now (the server checks the voice), so the old screens are retired.
+  if (['signin', 'otp', 'secure', 'create-pin'].includes(name)) return 'start';
   if (name === 'otp' && !state.form.phoneOk) return 'signin';
   if ((name === 'secure' || name === 'create-pin') && !state.form.otpOk) return 'signin';
   if (name === 'amount' && !state.flow.payee) return 'pay';
@@ -276,21 +283,13 @@ function makeAssistant() {
     interpreter,
     bank,
     banks: BANKS,
-    biometric: {
-      get available() { return state.biometric.available; },
-      register: registerBiometric,
-      verify: verifyBiometric,
-    },
-    credential: {
-      get: () => state.biometric.credentialId,
-      save: (id) => { credentialStore.save(id); state.biometric.credentialId = id; },
-    },
+    auth,
+    canRecord: recordingSupported(),
     session: {
       signedIn: () => state.signedIn,
-      authMethod: () => state.auth.method,
-      async signIn(method) {
+      async signIn() {
         await refreshBankData();
-        state.auth = { method };
+        state.auth = { method: 'voice' };
         state.signedIn = true;
         state.form = {};
         // Stay in the conversation; just make the address and menu match the signed-in state.
@@ -319,13 +318,6 @@ function makeAssistant() {
     },
     progress: (text) => talk.progress(text),
     switchToScreens: () => { talk.stop(); go(state.signedIn ? 'home' : 'start'); },
-    openReview: (payee, amountKobo) => {
-      resetFlow();
-      state.flow.payee = { ...payee };
-      state.flow.amountText = koboToInputText(amountKobo);
-      state.ui.focus = '#review-summary';
-      startReview();
-    },
   });
 }
 
@@ -336,6 +328,7 @@ const talk = createTalkDriver({
   speak,
   stopSpeaking,
   startListening: () => startListening(),
+  record: () => recordClip(),
   tone,
   vibrate: (ms) => { try { navigator.vibrate?.(ms); } catch { /* optional */ } },
   log: talkLog,
@@ -455,25 +448,18 @@ const FORMS = {
     flow.behaviour = document.querySelector('input[name="behaviour"]:checked')?.value ?? BEHAVIOURS.NORMAL;
     const button = document.getElementById('confirm-btn');
 
-    if (state.auth.method === 'biometric') {
-      state.ui.submitting = true;
-      setBusy(button, 'Waiting for your phone lock…');
-      announce('Confirm with your fingerprint, face or phone PIN to approve.');
-      const approved = await verifyBiometric(state.biometric.credentialId);
-      if (!approved.ok) {
-        state.ui.submitting = false;
-        return showErrors([{ field: 'confirm-btn', message: `${BIO_MESSAGES[approved.reason] ?? BIO_MESSAGES.cancelled} Nothing was sent.` }]);
-      }
-    } else if (val('pin') !== state.pin) {
-      return showErrors([{ field: 'pin', message: MESSAGES.pinWrong }]);
+    state.ui.submitting = true;
+    const approval = await approveByVoice(flow.transfer, button);
+    if (!approval.ok) {
+      state.ui.submitting = false;
+      return showErrors([{ field: 'confirm-btn', message: `${approval.message} Nothing was sent.` }]);
     }
 
-    state.ui.submitting = true;
     setBusy(button, 'Processing…');
     announce('Approved. Sending your transfer to the bank. Please wait.');
 
     bank.setBehaviour(flow.behaviour);
-    const processing = transition(flow.transfer, STATES.PROCESSING);
+    const processing = { ...transition(flow.transfer, STATES.PROCESSING), approvalToken: approval.approvalToken };
     flow.transfer = processing;
     state.attempts[processing.operationId] = processing;
 
@@ -492,6 +478,33 @@ const FORMS = {
     playOutcome(result.state, state.prefs.haptics);
   },
 };
+
+/** The Review screen's voice check: WAYMARK says random digits, records them, the server checks the voice. */
+async function approveByVoice(transfer, button) {
+  const VOICE_MESSAGES = {
+    'wrong-digits': 'Those were not the numbers asked for.',
+    'voice-mismatch': 'That voice did not match this account.',
+    'no-speech': 'WAYMARK did not hear you.',
+    'not-allowed': 'WAYMARK needs the microphone to check your voice. Allow it for this site and try again.',
+  };
+  try {
+    setBusy(button, 'Getting your numbers…');
+    const ch = await auth.challenge({ purpose: 'approve', idempotencyKey: transfer.operationId, payee: transfer.payee, amountKobo: transfer.amountKobo });
+    if (!ch.ok) return { ok: false, message: MESSAGES.network };
+    const spoken = ch.digits.split('').join(', ');
+    setBusy(button, `Say: ${ch.digits.split('').join(' ')}`);
+    await speak(`After the tone, say: ${spoken}.`);
+    tone('start');
+    const clip = await recordClip().done;
+    tone(clip.ok ? 'stop' : 'error');
+    if (!clip.ok) return { ok: false, message: VOICE_MESSAGES[clip.reason] ?? 'The microphone did not work.' };
+    setBusy(button, 'Checking your voice…');
+    const r = await auth.approve(ch.challengeId, clip.audio);
+    return r.ok ? r : { ok: false, message: VOICE_MESSAGES[r.code] ?? 'Your voice could not be checked.' };
+  } catch {
+    return { ok: false, message: MESSAGES.network };
+  }
+}
 
 // ---------- Buttons ----------
 
@@ -605,7 +618,9 @@ const ACTIONS = {
 
   'reset-ask'() { state.ui.confirmReset = true; rerender('#reset-confirm'); },
   'reset-no'() { state.ui.confirmReset = false; rerender(); },
-  'reset-yes'() {
+  async 'reset-yes'() {
+    await auth.signOut();
+    auth.forget();
     bank.reset();
     state.prefs = { ...DEFAULT_PREFS };
     prefsStore.save(state.prefs);
@@ -698,6 +713,14 @@ main.addEventListener('change', (e) => {
 
 applyPrefs();
 state.biometric.available = await biometricAvailable();
+// Still signed in from earlier in this tab (the server keeps the session for 30 minutes).
+if (auth.token()) {
+  try {
+    await refreshBankData();
+    state.signedIn = true;
+    state.auth = { method: 'voice' };
+  } catch { /* session over: sign in by voice again */ }
+}
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 if (!location.hash) history.replaceState(null, '', '#welcome');
 render();
