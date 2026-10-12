@@ -189,18 +189,20 @@ docs/       PRD and review (Word)
 
 The design system is described in [docs/DESIGN.md](docs/DESIGN.md). In short:
 
-- **Identity ("Midnight"):** a deep midnight canvas with a slow violet, magenta and amber aurora and faint
-  sound rings behind every screen. Amber marks anything you can act on.
-- **Type:** Unbounded, a wide geometric face, for headlines and large amounts, and Atkinson Hyperlegible
-  Next, made for low-vision readers, for reading text at a 19px base.
-- **Talk button:** a glass stage with a glowing voice orb. Each state has its own shape as well as its own
-  words: listening rings, violet while speaking, a turning ring while working, amber while waiting for your
-  voice check.
-- **Start page:** "Banking you can hear." explains the product in about three seconds, while the top of
-  the page stays one big tap-to-talk target.
+- **Identity ("Clarity"):** a calm, bright canvas like leading fintech apps, white cards, and one indigo
+  for anything you can act on. The logo is five sound bars that form a W, and the same bars return in
+  the balance card and the Talk tab.
+- **Type:** Plus Jakarta Sans throughout, at an 18px base and weight 500 so it stays readable in sunlight.
+- **Phones:** a bottom tab bar with Talk as the raised middle button; Help sits at the top right. Every
+  menu icon has its own shape.
+- **Talk button:** a white stage with a voice orb. Each state has its own shape as well as its own words:
+  listening rings, teal while WAYMARK speaks, a turning ring while it works, indigo panel while it waits
+  for your voice check.
+- **Start page:** "Banking you can hear." explains the product in about three seconds, while the Talk
+  target stays one big tap away.
 - High contrast mode swaps everything for black, white and yellow, with no gradients.
 
-Both fonts are self-hosted under the SIL Open Font License (`app/fonts/OFL-unbounded.txt`, `app/fonts/OFL-atkinson-next.txt`).
+The font is self-hosted under the SIL Open Font License (`app/fonts/OFL-plus-jakarta-sans.txt`).
 
 ## How it behaves
 

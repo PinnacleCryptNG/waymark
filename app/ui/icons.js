@@ -1,14 +1,15 @@
 // Inline SVG icons. Always decorative (aria-hidden): every icon sits next to a word that says
 // the same thing, so screen readers hear the word once and nothing else.
-// 24 x 24 grid, 2px strokes, square-ish joins: plain shapes that stay legible when enlarged.
+// 24 x 24 grid, 1.9px rounded strokes. Each menu icon has its own silhouette so none can be mistaken for another.
 
 const PATHS = {
-  home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
-  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
-  activity: '<path d="M4 6h16M4 12h16M4 18h10"/>',
-  pay: '<path d="M4 12h14"/><path d="m13 6 6 6-6 6"/>',
-  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14"/><path d="M12 17.5v.01"/>',
-  settings: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+  voice: '<path d="M4 10v4M8 6.5v11M12 3v18M16 7.5v9M20 10v4"/>',
+  home: '<path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1Z"/>',
+  mic: '<rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5M8.5 21.5h7"/>',
+  activity: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z"/><path d="M9.5 8h5M9.5 12h5M9.5 16h3"/>',
+  pay: '<path d="M21 3 10 14"/><path d="M21 3 14.5 21l-4.5-7-7-4.5Z"/>',
+  help: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="m5.6 5.6 3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
   chevron: '<path d="m9 5 7 7-7 7"/>',
   back: '<path d="m15 5-7 7 7 7"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -26,8 +27,8 @@ const PATHS = {
 };
 
 export const icon = (name, cls = 'icon') =>
-  `<svg class="${cls}" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${PATHS[name]}</svg>`;
+  `<svg class="${cls}" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${PATHS[name]}</svg>`;
 
-/** The WAYMARK mark: a trail blaze pointing the way. Colours come from CSS (--blaze, --accent). */
+/** The WAYMARK mark: five sound bars that form a W, on the brand tile. */
 export const mark = (cls = 'mark') =>
-  `<svg class="${cls}" viewBox="0 0 32 32" width="32" height="32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="3" class="mark__blaze"/><path d="M9 21.5 16 10l7 11.5" class="mark__arrow" fill="none" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter"/></svg>`;
+  `<svg class="${cls}" viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" focusable="false"><defs><linearGradient id="wm-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4434e0"/><stop offset="1" stop-color="#7b4dff"/></linearGradient></defs><rect width="40" height="40" rx="12" class="mark__tile" fill="url(#wm-grad)"/><g class="mark__bars" fill="#fff"><rect x="6.3" y="11" width="3.4" height="18" rx="1.7"/><rect x="12.3" y="20" width="3.4" height="9" rx="1.7"/><rect x="18.3" y="15" width="3.4" height="14" rx="1.7"/><rect x="24.3" y="20" width="3.4" height="9" rx="1.7"/><rect x="30.3" y="11" width="3.4" height="18" rx="1.7"/></g></svg>`;

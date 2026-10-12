@@ -424,7 +424,7 @@ export function talk(state) {
     ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Voice checks are recorded and sent to the WAYMARK server, which keeps a voiceprint, not the recordings.'
     : 'In Chrome, your speech is sent to Google to turn it into text. Voice checks are recorded and sent to the WAYMARK server, which keeps a voiceprint, not the recordings.';
   const target = `<button type="button" id="talk-btn" class="talk-target" data-state="${talkState(status)}">
-        <span class="talk-target__icon" aria-hidden="true">${icon('mic', 'icon talk-icon talk-icon--mic')}${icon('mic', 'icon talk-icon talk-icon--fingerprint')}<span class="talk-bars"><i></i><i></i><i></i><i></i></span></span>
+        <span class="talk-target__icon" aria-hidden="true">${icon('mic', 'icon talk-icon talk-icon--mic')}${icon('mic', 'icon talk-icon talk-icon--tap')}<span class="talk-bars"><i></i><i></i><i></i><i></i></span></span>
         <span class="talk-target__label">Tap anywhere to talk</span>
         <span class="talk-target__status" id="talk-status" aria-hidden="true">${esc(status)}</span>
       </button>`;
@@ -464,9 +464,14 @@ export function talk(state) {
     html: `<section class="landing-hero" aria-labelledby="page-title">
       <div class="landing-hero__inner">
         <div class="landing-hero__copy">
-          <p class="kicker kicker--on-dark">Voice banking for blind and low-vision Nigerians</p>
+          <p class="hero-badge">${icon('ear', 'icon hero-badge__icon')}<span>For blind and low-vision Nigerians</span></p>
           <h1 id="page-title" tabindex="-1">Banking you can <span class="hl">hear.</span></h1>
           <p class="landing-hero__lede">Say who to pay. WAYMARK reads back their real name before any money moves. Only your voice can approve it.</p>
+          <ul class="hero-points">
+            <li>${icon('check')}<span>Voice-verified payments</span></li>
+            <li>${icon('check')}<span>Real names read back</span></li>
+            <li>${icon('check')}<span>Never pays twice</span></li>
+          </ul>
         </div>
         <div class="landing-hero__talk">${target}${liveFeed(state.voice.log)}</div>
         <div class="landing-hero__links">

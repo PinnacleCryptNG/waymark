@@ -1,5 +1,5 @@
 // Offline support: always fetch the latest files when online, keep a copy for when offline.
-const CACHE = 'waymark-v10';
+const CACHE = 'waymark-v11';
 const FILES = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './ui/app.js', './ui/screens.js', './ui/dom.js', './ui/store.js', './ui/haptics.js', './ui/biometric.js', './ui/icons.js', './ui/talk.js',
@@ -7,7 +7,7 @@ const FILES = [
   './domain/directory.js', './domain/validation.js', './data/seed.js',
   './bank/bank-api.js', './bank/demo-bank.js', './bank/server-bank.js', './bank/transfer-client.js',
   './icons/mark.svg', './img/waves.svg', './icons/icon-192.png',
-  './fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2', './fonts/unbounded-latin-wght-normal.woff2',
+  './fonts/plus-jakarta-sans-latin-wght-normal.woff2',
   './voice/intent.js', './voice/dialog.js', './voice/interpreter.js', './voice/speech.js', './voice/assistant.js', './voice/gemini-interpreter.js', './voice/voice-auth.js', './voice/recorder.js', './config.js',
 ];
 

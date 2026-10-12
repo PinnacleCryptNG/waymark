@@ -4,8 +4,8 @@
   "description": "Accessible banking prototype. Demo only, no real money.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0a0a12",
-  "theme_color": "#0a0a12",
+  "background_color": "#f4f5fa",
+  "theme_color": "#4434e0",
   "lang": "en-NG",
   "icons": [
     {
