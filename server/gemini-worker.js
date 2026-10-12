@@ -115,28 +115,24 @@ export async function askGemini(text, banks, env, fetchFn = fetch) {
   throw new Error(`Gemini ${last.status}`);
 }
 
-/** GET /check: a plain report to open in a browser. Never shows the key. */
-export async function selfCheck(env, fetchFn = fetch) {
-  const report = { server: 'running', keySet: Boolean(env.GEMINI_API_KEY), model: env.GEMINI_MODEL || DEFAULT_MODEL,
-    allowedSites: env.ALLOWED_ORIGINS ?? '(none)', tries: [] };
-  if (!report.keySet) return { ...report, verdict: 'No GEMINI_API_KEY secret found. Add it under Settings, Variables and Secrets, as type Secret.' };
-  for (const where of order(env)) {
-    try {
-      const r = await callGemini(where, 'abeg send Musa 5k', [], env, fetchFn);
-      report.tries.push({ where, status: r.status, ...(r.ok ? { understood: r.intent } : { message: r.message }) });
-      if (r.ok) return { ...report, verdict: 'Working. Gemini understood the test sentence.' };
-    } catch (e) {
-      report.tries.push({ where, error: String(e).slice(0, 200) });
-    }
-  }
-  return { ...report, verdict: 'Gemini refused. See the messages above.' };
+/** GET /check: a plain report to open in a browser. Free: it does not call Gemini, and never shows the key. */
+export function selfCheck(env) {
+  const keySet = Boolean(env.GEMINI_API_KEY);
+  return {
+    server: 'running',
+    keySet,
+    model: env.GEMINI_MODEL || DEFAULT_MODEL,
+    allowedSites: env.ALLOWED_ORIGINS ?? '(none)',
+    verdict: keySet ? 'Ready. Try a sentence in WAYMARK; the conversation shows "understood by Gemini".'
+      : 'No GEMINI_API_KEY secret found. Add it under Settings, Variables and Secrets, as type Secret.',
+  };
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/check') {
-      return new Response(JSON.stringify(await selfCheck(env), null, 2), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify(selfCheck(env), null, 2), { headers: { 'Content-Type': 'application/json' } });
     }
     const headers = cors(request.headers.get('Origin'), env);
     if (!headers) return json({ error: 'origin not allowed' }, 403, {});

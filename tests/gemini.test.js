@@ -45,15 +45,19 @@ test('server tries the Vertex address when the AI Studio address refuses the key
   assert.equal(urls.length, 1);
 });
 
-test('self-check reports without showing the key', async () => {
-  const fake = async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'API key not valid.' } }) });
-  const r = await selfCheck({ GEMINI_API_KEY: 'secret-key-123' }, fake);
+test('self-check is free and never shows the key', async () => {
+  let calls = 0;
+  const r = selfCheck({ GEMINI_API_KEY: 'secret-key-123' });
   assert.equal(r.keySet, true);
-  assert.equal(r.tries.length, 2);
   assert.ok(!JSON.stringify(r).includes('secret-key-123'));
-  assert.match((await selfCheck({}, fake)).verdict, /No GEMINI_API_KEY/);
-  const res = await worker.fetch(new Request('https://w.example/check'), {});
-  assert.equal(res.status, 200);
+  assert.match(selfCheck({}).verdict, /No GEMINI_API_KEY/);
+  const orig = globalThis.fetch;
+  globalThis.fetch = async () => { calls++; throw new Error('no'); };
+  try {
+    const res = await worker.fetch(new Request('https://w.example/check'), { GEMINI_API_KEY: 'k' });
+    assert.equal(res.status, 200);
+  } finally { globalThis.fetch = orig; }
+  assert.equal(calls, 0, 'no Gemini call');
 });
 
 test('server refuses other websites and bad requests', async () => {

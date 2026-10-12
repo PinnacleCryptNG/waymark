@@ -55,3 +55,14 @@ then uses Gemini. The Talk screen and Help say that Gemini is in use.
 - **To change the model,** add a Text variable `GEMINI_MODEL` with the model name. The default is
   `gemini-flash-lite-latest`, Google's always-current small, fast model.
 - **To turn Gemini off,** remove the address from `app/config.js`, or delete the Worker.
+
+## Checking it is running
+
+Open `https://<your Worker address>/check`. It shows whether the server is running and has a key.
+It does not call Gemini, so it costs nothing, and it never shows the key.
+To see Gemini at work, open WAYMARK, say something, then open **Conversation, and typing instead**:
+each sentence ends with "(understood by Gemini)" or "(understood by built-in rules)".
+
+The origin check stops other websites using the server from a browser. It is not a password:
+a determined person could still call it directly. That is acceptable for a demo on a free key with
+spending limits. A real bank would put the server behind its own sign-in.
