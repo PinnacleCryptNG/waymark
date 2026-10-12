@@ -560,7 +560,7 @@ html[data-contrast="high"] .demo-phone figcaption { color: #fff; }
     grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); column-gap: var(--s7);
     padding: var(--s7) var(--s5) var(--s7);
   }
-  .landing-hero__copy, .landing-hero .talk-target, .landing-hero__links { grid-column: 1; }
+  .landing-hero__copy, .landing-hero__talk, .landing-hero__links { grid-column: 1; }
   .landing-hero .talk-target { min-height: 15rem; flex-direction: row; justify-content: flex-start; text-align: left; gap: var(--s5); padding: var(--s5) var(--s6); }
   .landing-hero .talk-target__icon { width: 6.5rem; height: 6.5rem; }
   .landing-hero .talk-target .talk-target__label { flex: 1 1 auto; }
@@ -749,6 +749,21 @@ html[data-contrast="high"] .voice-log__item { border: 1px solid #fff; border-lef
 .voice-log__who { font-weight: 700; }
 .voice-log__via { color: var(--muted); font-size: var(--text-sm); }
 
+/* Live feed: what WAYMARK heard and said, in large type, for anyone looking at the phone. */
+.live-feed { list-style: none; margin: var(--s4) 0 0; padding: 0; display: grid; gap: var(--s2); }
+.live-feed li { margin: 0; }
+.live-feed__item {
+  padding: var(--s3) var(--s4); border-radius: var(--radius-sm); overflow-wrap: anywhere;
+  font-size: var(--text-lg); line-height: 1.4; background: var(--surface); color: var(--ink);
+  border-left: 6px solid var(--blaze); font-size: var(--text-md);
+}
+.live-feed__item:last-child { font-size: var(--text-xl); }
+.live-feed__item--you { justify-self: end; max-width: 90%; background: var(--accent-soft); border-left: 0; border-right: 6px solid var(--accent); text-align: right; }
+.live-feed__who { display: block; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.live-feed__item:last-child { animation: feed-in 220ms ease-out; }
+@keyframes feed-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+html[data-contrast="high"] .live-feed__item { background: #000; color: #fff; border: 2px solid #fff; }
+
 /* ---------- Motion ---------- */
 
 .app-main { animation: fade-in 160ms ease-out; }
@@ -774,3 +789,30 @@ html[data-motion="reduce"] .talk-target[data-state="listening"] .talk-target__ic
   /* On phones every button is full width: one consistent target size and edge. */
   form > .button, .button--confirm, .actions--inline .button { width: 100%; flex: 1 1 100%; }
 }
+
+/* ---------- Theme options (preview only: ?theme=navy|plum|teal, &bg=waves) ---------- */
+html[data-theme="navy"] {
+  --bg: #f5f6fa; --surface-2: #eceef5; --ink: #0f172a; --muted: #475069; --rule: #d5d9e4;
+  --accent: #1b2b52; --accent-strong: #132042; --accent-deep: #0b1530; --on-accent-line: #3a4c7a;
+  --accent-soft: #e4e9f5; --on-accent-muted: #d3dbef;
+  --blaze: #ff7a59; --blaze-ink: #0f172a; --focus: #ff7a59; --focus-edge: #0f172a;
+}
+html[data-theme="plum"] {
+  --bg: #f7f5fb; --surface-2: #efebf7; --ink: #1a1326; --muted: #554a66; --rule: #ddd6ea;
+  --accent: #3b1f6e; --accent-strong: #2c1555; --accent-deep: #1d0d3b; --on-accent-line: #5b3f8f;
+  --accent-soft: #ebe4f7; --on-accent-muted: #ddd2f0;
+  --blaze: #5eead4; --blaze-ink: #1a1326; --focus: #5eead4; --focus-edge: #1a1326;
+}
+html[data-theme="teal"] {
+  --bg: #f4f8f8; --surface-2: #e8f0f0; --ink: #0d1b1e; --muted: #42575b; --rule: #d0dddf;
+  --accent: #0b4a57; --accent-strong: #083a45; --accent-deep: #052a32; --on-accent-line: #2b6b78;
+  --accent-soft: #dfeef0; --on-accent-muted: #cfe5e9;
+  --blaze: #ffa24c; --blaze-ink: #0d1b1e; --focus: #ffa24c; --focus-edge: #0d1b1e;
+}
+html[data-bg="waves"] body::before,
+html[data-bg="waves"] .landing-hero::before,
+html[data-bg="waves"] .landing-cta::before {
+  -webkit-mask-image: url(img/waves.svg); mask-image: url(img/waves.svg);
+}
+html[data-bg="waves"] .landing-hero::before { opacity: 0.22; animation: ripple 6s ease-in-out infinite alternate; }
+@keyframes ripple { from { transform: scale(1); } to { transform: scale(1.06); } }

@@ -104,7 +104,7 @@ export function createAssistant(deps) {
     if (deps.session.signedIn()) return remember(await ready('WAYMARK here.'));
     if (deps.credential.get() && deps.biometric.available) {
       s.phase = 'signin-tap';
-      return remember(say('Welcome back to WAYMARK. To sign in, tap anywhere on the screen, then touch your fingerprint sensor.'));
+      return remember(say('Welcome back to WAYMARK. To sign in, tap anywhere on the screen, then confirm with your phone lock: fingerprint, face or PIN.'));
     }
     s.phase = 'phone';
     return remember(say(
@@ -135,10 +135,10 @@ export function createAssistant(deps) {
     }
     if (deps.biometric.available) {
       s.phase = 'secure-tap';
-      return say("That's right. Now let's protect your payments with your fingerprint, so you never have to say or type a pin. Tap anywhere on the screen, then touch your fingerprint sensor.");
+      return say("That's right. Now let's protect your payments with your phone lock, so you never have to say a pin out loud. Tap anywhere on the screen, then confirm with your phone lock: fingerprint, face or PIN.");
     }
     s.phase = 'no-fingerprint';
-    return say("That's right. This phone cannot use a fingerprint here, and payments need one to be safe by voice. Say screens to finish setting up with a pin on the screens.");
+    return say("That's right. This phone has no screen lock WAYMARK can use, and payments need one to be safe by voice. Say screens to finish setting up with a pin on the screens.");
   }
 
   // ---------- paying ----------
@@ -165,7 +165,7 @@ export function createAssistant(deps) {
     s.phase = 'confirm-tap';
     return say(`Send ${spokenNaira(quote.amountKobo)} to ${payee.name}, ${bankName(payee.bankCode)}, ${spokenAccountEnding(payee.accountNumber)}. `
       + `The fee is ${spokenNaira(quote.feeKobo)}, so ${spokenNaira(quote.totalKobo)} in total. `
-      + 'To send it, tap anywhere on the screen, then touch your fingerprint sensor. To stop, say cancel.');
+      + "To send it, tap anywhere on the screen, then confirm with your phone lock: fingerprint, face or PIN. To stop, say cancel.");
   }
 
   async function banking(text) {
@@ -223,7 +223,7 @@ export function createAssistant(deps) {
         return remember(hearCode(rawText));
       case 'secure-tap':
       case 'signin-tap':
-        return remember(say('Tap anywhere on the screen, then touch your fingerprint sensor. If you keep having trouble, say screens.'));
+        return remember(say("Tap anywhere on the screen, then confirm with your phone lock: fingerprint, face or PIN. If you keep having trouble, say screens."));
       case 'no-fingerprint':
         return remember(say('Say screens to finish setting up on the screens.'));
       case 'confirm-tap':
@@ -233,7 +233,7 @@ export function createAssistant(deps) {
           s.phase = 'ready';
           return remember(say('Cancelled. Nothing was sent. What else would you like to do?'));
         }
-        return remember(say('To send it, tap anywhere on the screen, then touch your fingerprint sensor. To stop, say cancel.'));
+        return remember(say("To send it, tap anywhere on the screen, then confirm with your phone lock: fingerprint, face or PIN. To stop, say cancel."));
       default:
         break;
     }
@@ -250,7 +250,7 @@ export function createAssistant(deps) {
     switch (s.phase) {
       case 'secure-tap': {
         const reg = await deps.biometric.register();
-        if (!reg.ok) return remember(say("That didn't work. Tap anywhere on the screen, then touch your fingerprint sensor. If you keep having trouble, say screens."));
+        if (!reg.ok) return remember(say("That didn't work. Tap anywhere on the screen, then confirm with your phone lock: fingerprint, face or PIN. If you keep having trouble, say screens."));
         deps.credential.save(reg.credentialId);
         await deps.session.signIn('biometric');
         const ctx = deps.session.context();
@@ -258,13 +258,13 @@ export function createAssistant(deps) {
       }
       case 'signin-tap': {
         const v = await deps.biometric.verify(deps.credential.get());
-        if (!v.ok) return remember(say("That didn't work. Tap anywhere on the screen, then touch your fingerprint sensor."));
+        if (!v.ok) return remember(say("That didn't work. Tap anywhere on the screen, then confirm with your phone lock: fingerprint, face or PIN."));
         await deps.session.signIn('biometric');
         return remember(await ready("You're signed in."));
       }
       case 'confirm-tap': {
         const v = await deps.biometric.verify(deps.credential.get());
-        if (!v.ok) return remember(say('Fingerprint not confirmed. Nothing was sent. Tap anywhere to try again, or say cancel.'));
+        if (!v.ok) return remember(say('Not confirmed. Nothing was sent. Tap anywhere to try again, or say cancel.'));
         await deps.progress('Sending.');
         const processing = transition(s.pending, STATES.PROCESSING);
         s.pending = null;

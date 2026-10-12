@@ -11,7 +11,7 @@ A blind customer can pay a brand-new account number privately and confidently, w
 - **Name check before paying.** Type a 10-digit account number and choose a bank. WAYMARK looks up the account name in a fictional directory, reads it once, offers **Spell name**, and asks for a separate confirmation.
 - **Lookalike warning.** If the name looks like a saved beneficiary but the number is different, WAYMARK says so before you can continue.
 - **Fingerprint approval.** Sign-in and payments are approved with the phone's own fingerprint or face unlock (WebAuthn). Nothing is spoken or typed, so nothing can be overheard. A returning user signs in with one touch. A 4-digit demo pin remains as a fallback; when screen-reader users type it, the keyboard reads each key aloud, so WAYMARK says to use headphones.
-- **Voice first, no screen reader needed.** The first screen is one big button: tap anywhere and WAYMARK speaks with the phone's own voice, then listens. Sign-up is spoken from the very start: say your mobile number, say the code, then tap anywhere and touch the fingerprint sensor. After that, say "what is my balance", "send 5,000 naira to Musa" or "pay 0198765432 at Lagoon Bank, 2,000 naira". WAYMARK reads back who, how much, the fee and the total from the bank's own figures; to send, tap anywhere and touch the fingerprint sensor. "Yes" alone never sends. A tap always interrupts. A rising tone means listening, a falling tone means done. For a new account, WAYMARK reads the owner's name, with any lookalike warning, and continues only on a clear "yes". Voice payments are limited to ₦50,000; "use the screens" switches to the screen-reader path at any time. A returning user taps once and touches the sensor to sign in.
+- **Voice first, no screen reader needed.** The first screen is one big button: tap anywhere and WAYMARK speaks with the phone's own voice, then listens. Sign-up is spoken from the very start: say your mobile number, say the code, then tap anywhere and confirm with the phone lock (fingerprint, face or phone PIN). After that, say "what is my balance", "send 5,000 naira to Musa" or "pay 0198765432 at Lagoon Bank, 2,000 naira". WAYMARK reads back who, how much, the fee and the total from the bank's own figures; to send, tap anywhere and confirm with the phone lock. "Yes" alone never sends. A tap always interrupts. A rising tone means listening, a falling tone means done. For a new account, WAYMARK reads the owner's name, with any lookalike warning, and continues only on a clear "yes". Voice payments are limited to ₦50,000; "use the screens" switches to the screen-reader path at any time. A returning user taps once and confirms with the phone lock to sign in.
 - **Fewer steps.** Saved payees are one-tap "Pay" buttons on Home and Pay. The Review screen opens with one sentence that says who, how much, the fee and the total, followed directly by the approve button. Demo-only controls are collapsed out of the way.
 - **Outcomes you can trust.** Completed, Failed, Pending and Outcome unknown are four separate states. Pending and unknown offer **Check status** only, never "send again".
 - **Outcome vibrations.** On Android, each outcome has its own vibration pattern alongside the spoken heading.
@@ -56,12 +56,12 @@ A real app would not have this choice.
 
 ### 90-second demo script
 
-1. Start the demo, enter any mobile number and code 123456, then choose **Use my fingerprint** (J1).
+1. Start the demo, enter any mobile number and code 123456, then choose **Use my phone lock** (J1).
 2. On Home, move by heading to Balance: "Demo balance, 245,800 naira" (J2).
 3. On Home, choose **Pay a new account** → 5009988776, Kola Microfinance. Hear the lookalike warning. Choose **No, change details**.
 4. Enter 0198765432, Lagoon Bank. Hear "Chinedu Eze", try **Spell name**, then **Yes, pay Chinedu Eze** (J3).
 5. Enter 245800 to show the over-balance error with the amount kept, then correct it to 5000 (J5).
-6. Review: one sentence says who, how much, the fee and the total. Choose **Confirm with fingerprint** and touch the sensor. The result is announced and activity updates once (J4).
+6. Review: one sentence says who, how much, the fee and the total. Choose **Confirm with phone lock** and confirm with your fingerprint, face or phone PIN. The result is announced and activity updates once (J4).
 7. On Home, tap **Pay Musa Ibrahim**, then under **Demo controls for judges** choose **The connection drops after sending**. After 6 seconds with no reply the app says it could not confirm the transfer. The only action is **Check status**, which finds the bank had completed it (J6).
 
 ## Accessibility

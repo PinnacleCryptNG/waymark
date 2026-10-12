@@ -13,7 +13,7 @@ export const TALK_STATUS = {
   listening: 'Listening… speak now',
   speaking: 'Speaking. Tap to interrupt.',
   working: 'One moment…',
-  tap: 'Tap anywhere, then touch your fingerprint sensor',
+  tap: 'Tap anywhere, then confirm with your fingerprint, face or phone PIN',
 };
 
 /**

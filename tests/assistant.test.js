@@ -65,7 +65,7 @@ test('sign-up by voice: phone, code, fingerprint, then ready', async () => {
   assert.match(r.say, /the code is 1 2 3 4 5 6/);
 
   r = await a.hear('one two three four five six');
-  assert.match(r.say, /Tap anywhere on the screen, then touch your fingerprint sensor/);
+  assert.match(r.say, /Tap anywhere on the screen, then confirm with your phone lock/);
   assert.equal(a.wantsTap(), true);
 
   r = await a.tapped();
@@ -88,7 +88,7 @@ test('no fingerprint on this phone: voice sends the user to the screens', async 
   await a.begin();
   await a.hear('08031234567');
   let r = await a.hear('123456');
-  assert.match(r.say, /cannot use a fingerprint/);
+  assert.match(r.say, /has no screen lock WAYMARK can use/);
   r = await a.hear('screens');
   assert.equal(log.screens, 1);
 });
@@ -105,7 +105,7 @@ async function signedIn(opts) {
 test('pay a saved person entirely by voice: summary from bank figures, tap and fingerprint to send', async () => {
   const { a, data } = await signedIn();
   let r = await a.hear('send 500 naira to Musa');
-  assert.equal(r.say, 'Send 500 naira to Musa Ibrahim, Savanna Bank (demo), account ending 8 8 4 6. The fee is 10 naira, so 510 naira in total. To send it, tap anywhere on the screen, then touch your fingerprint sensor. To stop, say cancel.');
+  assert.equal(r.say, "Send 500 naira to Musa Ibrahim, Savanna Bank (demo), account ending 8 8 4 6. The fee is 10 naira, so 510 naira in total. To send it, tap anywhere on the screen, then confirm with your phone lock: fingerprint, face or PIN. To stop, say cancel.");
   assert.equal(a.wantsTap(), true);
 
   r = await a.hear('yes');
@@ -136,7 +136,7 @@ test('a failed fingerprint sends nothing', async () => {
   await refusing.a.begin();
   await refusing.a.hear('send 500 to Musa');
   const r = await refusing.a.tapped();
-  assert.match(r.say, /Fingerprint not confirmed\. Nothing was sent/);
+  assert.match(r.say, /Not confirmed\. Nothing was sent/);
   assert.equal(refusing.data.account.balanceKobo, 24580000);
 });
 

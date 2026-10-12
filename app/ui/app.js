@@ -193,16 +193,16 @@ async function finishSignIn(method) {
   state.signedIn = true;
   state.form = {};
   state.ui.flash = method === 'biometric'
-    ? 'You are signed in. Payments are approved with your fingerprint.'
+    ? 'You are signed in. Payments are approved with your phone lock.'
     : 'You are signed in to the demo.';
   go('home');
   return true;
 }
 
 const BIO_MESSAGES = {
-  cancelled: 'Fingerprint not confirmed. Try again.',
-  'already-registered': 'This phone already has a fingerprint set up for the demo. Try again.',
-  unavailable: 'Fingerprint is not available in this browser. Use a pin instead.',
+  cancelled: 'Not confirmed. Try again.',
+  'already-registered': 'This phone is already set up for the demo. Try again.',
+  unavailable: 'Phone lock is not available in this browser. Use a pin instead.',
 };
 
 function setBusy(button, text) {
@@ -255,6 +255,11 @@ function talkLog(who, text) {
   state.voice.log.push({ who, text });
   const list = document.getElementById('voice-log');
   if (list) list.innerHTML = screens.voiceLogHtml(state.voice.log);
+  const feed = document.getElementById('live-feed');
+  if (feed) {
+    feed.innerHTML = screens.liveFeedHtml(state.voice.log);
+    feed.hidden = false;
+  }
 }
 
 function talkStatus(text) {
@@ -342,6 +347,9 @@ function applyPrefs() {
   root.dataset.textSize = state.prefs.textSize;
   root.dataset.contrast = state.prefs.highContrast ? 'high' : 'standard';
   root.dataset.motion = state.prefs.reducedMotion ? 'reduce' : 'standard';
+  const preview = new URLSearchParams(location.search);
+  root.dataset.theme = preview.get('theme') ?? '';
+  root.dataset.bg = preview.get('bg') ?? '';
 }
 
 // ---------- Forms ----------
@@ -449,8 +457,8 @@ const FORMS = {
 
     if (state.auth.method === 'biometric') {
       state.ui.submitting = true;
-      setBusy(button, 'Waiting for fingerprint…');
-      announce('Touch the fingerprint sensor to approve.');
+      setBusy(button, 'Waiting for your phone lock…');
+      announce('Confirm with your fingerprint, face or phone PIN to approve.');
       const approved = await verifyBiometric(state.biometric.credentialId);
       if (!approved.ok) {
         state.ui.submitting = false;
@@ -494,8 +502,8 @@ const ACTIONS = {
   },
 
   async 'setup-biometric'(el) {
-    setBusy(el, 'Waiting for fingerprint…');
-    announce('Touch the fingerprint sensor.');
+    setBusy(el, 'Waiting for your phone lock…');
+    announce('Confirm with your fingerprint, face or phone PIN.');
     const result = await registerBiometric();
     if (!result.ok) {
       return showErrors([{ field: 'bio-setup', message: BIO_MESSAGES[result.reason] ?? BIO_MESSAGES.unavailable }]);
@@ -506,8 +514,8 @@ const ACTIONS = {
   },
 
   async 'biometric-signin'(el) {
-    setBusy(el, 'Waiting for fingerprint…');
-    announce('Touch the fingerprint sensor to sign in.');
+    setBusy(el, 'Waiting for your phone lock…');
+    announce('Confirm with your fingerprint, face or phone PIN to sign in.');
     const result = await verifyBiometric(state.biometric.credentialId);
     if (!result.ok) {
       return showErrors([{ field: 'bio-signin', message: BIO_MESSAGES[result.reason] ?? BIO_MESSAGES.cancelled }]);
