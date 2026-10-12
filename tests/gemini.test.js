@@ -77,6 +77,14 @@ test('a Pidgin request becomes a normal transfer, matched to saved payees on the
   assert.deepEqual(intent.payeeIds, [BENEFICIARIES.find((b) => b.name.startsWith('Musa')).id]);
 });
 
+test('an amount Gemini dropped is kept from the rules', async () => {
+  const i = createGeminiInterpreter({ endpoint: 'https://w.example', fetchFn: reply({ type: 'transfer', payeeName: 'Musa' }) });
+  const intent = await i.interpret('send 500 naira to Musa', ctx);
+  assert.equal(intent.via, 'gemini');
+  assert.equal(intent.amountKobo, 50000);
+  assert.equal(intent.payeeIds.length, 1);
+});
+
 test('only the sentence and bank names leave the phone', async () => {
   let body;
   const i = createGeminiInterpreter({ endpoint: 'https://w.example/', fetchFn: async (url, init) => { body = JSON.parse(init.body); assert.equal(url, 'https://w.example/interpret'); return reply({ type: 'balance' })(); } });
