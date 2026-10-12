@@ -973,3 +973,11 @@ html[data-contrast="high"] .hero-badge__icon { background: #ffd400; color: #000;
 .hero-badge { word-spacing: 0.1em; }
 * { scroll-margin-top: 5.5rem; scroll-margin-bottom: 6.5rem; }
 @media (min-width: 60rem) { .landing-hero .talk-target { padding: var(--s6) var(--s6) var(--s6) 3.25rem; gap: var(--s6); } }
+@media (max-width: 51.99rem) {
+  .app-header__inner { padding-right: 7.5rem; }
+  html[data-text-size="large"] .app-header__inner, html[data-text-size="xlarge"] .app-header__inner { padding-right: 4.5rem; }
+  html[data-text-size="large"] .nav-help a span, html[data-text-size="xlarge"] .nav-help a span {
+    position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  html[data-text-size="large"] .nav-help a, html[data-text-size="xlarge"] .nav-help a { padding: 0.6rem; min-width: 3rem; justify-content: center; }
+}
