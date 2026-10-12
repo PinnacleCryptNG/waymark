@@ -204,6 +204,17 @@ The design system is described in [docs/DESIGN.md](docs/DESIGN.md). In short:
 
 The font is self-hosted under the SIL Open Font License (`app/fonts/OFL-plus-jakarta-sans.txt`).
 
+### Free hosting on Oracle Cloud
+
+On an Always Free Ampere VM (Ubuntu 24.04, ports 80 and 443 open in the security list), one command
+installs Docker and Caddy, builds the server, and serves the app with HTTPS at `<ip-with-dashes>.sslip.io`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/PinnacleCryptNG/waymark/<branch>/deploy/oracle/setup.sh | sudo bash -s -- <branch>
+```
+
+Run it again to deploy newer code. Accounts and voiceprints persist in `/var/lib/waymark`.
+
 ## How it behaves
 
 - Money is integer kobo throughout. The fee is a flat ₦10.00 demo fee.
