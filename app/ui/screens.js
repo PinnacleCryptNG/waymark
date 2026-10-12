@@ -16,6 +16,7 @@ import { EXAMPLES } from '../voice/dialog.js';
 import { TALK_STATUS } from './talk.js';
 import { AI_ENDPOINT } from '../config.js';
 import { recognitionSupported } from '../voice/speech.js';
+import { icon } from './icons.js';
 
 const h1 = (text) => `<h1 id="page-title" tabindex="-1">${esc(text)}</h1>`;
 const h1Html = (html) => `<h1 id="page-title" tabindex="-1">${html}</h1>`;
@@ -23,8 +24,12 @@ const accountEnding = (n) => dual(maskAccount(n), spokenAccountEnding(n));
 // Screen readers spell an all-capitals "PIN" letter by letter; say it as a word.
 const PIN = dual('PIN', 'pin');
 
+const STATUS_ICON = { completed: 'check', failed: 'cross', pending: 'clock', unknown: 'question' };
 const statusTag = (status) =>
-  `<span class="status status--${esc(status)}">${esc(STATUS_LABEL[status] ?? status)}</span>`;
+  `<span class="status status--${esc(status)}">${icon(STATUS_ICON[status] ?? 'question', 'icon status__icon')}${esc(STATUS_LABEL[status] ?? status)}</span>`;
+
+const initials = (name) => name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+const steps = (n) => `<p class="steps"><span class="steps__text">Step ${n} of 3</span><span class="steps__bar" aria-hidden="true">${[1, 2, 3].map((i) => `<i${i <= n ? ' class="on"' : ''}></i>`).join('')}</span></p>`;
 
 const sep = '<span class="sr-only">, </span>';
 const row = (k, v) => `<div class="kv"><dt>${esc(k)}</dt><dd>${v}</dd></div>`;
@@ -32,6 +37,7 @@ const row = (k, v) => `<div class="kv"><dt>${esc(k)}</dt><dd>${v}</dd></div>`;
 function txItem(t) {
   return `<li class="tx">
     <a class="tx__link" href="#tx/${esc(t.id)}">
+      <span class="tx__icon tx__icon--${t.direction}">${icon(t.direction === 'debit' ? 'out' : 'in')}</span>
       <span class="tx__desc">${esc(t.description)}</span>${sep}
       <span class="tx__date">${esc(spokenDate(t.occurredAt))}</span>${sep}
       <span class="tx__amount tx__amount--${t.direction}">${signedMoney(t.direction, t.amountKobo)}</span>${sep}
@@ -43,8 +49,10 @@ function txItem(t) {
 /** One-tap "pay this person" buttons. */
 const payeeButtons = (beneficiaries) => `<ul class="choice-list">
   ${beneficiaries.map((b) => `<li><button type="button" class="choice" data-action="pay-to" data-id="${esc(b.id)}">
-    <span class="choice__title">Pay ${esc(b.name)}</span>${sep}
-    <span class="choice__hint">${esc(bankName(b.bankCode))}, ${accountEnding(b.accountNumber)}</span>
+    <span class="avatar" aria-hidden="true">${esc(initials(b.name))}</span>
+    <span class="choice__body"><span class="choice__title">Pay ${esc(b.name)}</span>${sep}
+    <span class="choice__hint">${esc(bankName(b.bankCode))}, ${accountEnding(b.accountNumber)}</span></span>
+    ${icon('chevron', 'icon choice__chevron')}
   </button></li>`).join('')}
 </ul>`;
 
@@ -54,13 +62,22 @@ export function welcome(state) {
   const quick = state.biometric.available && state.biometric.credentialId;
   return {
     title: 'Welcome',
-    html: `${h1('WAYMARK')}
+    layout: 'hero',
+    html: `<div class="hero">
+      <p class="eyebrow">Accessible banking demo</p>
+      ${h1('WAYMARK')}
       ${errorSummary(state.ui.errors)}
-      <p class="lede">Pay anyone, and hear exactly who you are paying, without asking someone to read your screen.</p>
+      <p class="lede hero__lede">Pay anyone, and hear exactly who you are paying, without asking someone to read your screen.</p>
       <div class="actions">
         ${quick ? '<button type="button" class="button" id="bio-signin" data-action="biometric-signin">Sign in with fingerprint</button>' : ''}
         <a class="button${quick ? ' button--secondary' : ''}" href="#signin">${quick ? 'Sign in another way' : 'Start the demo'}</a>
       </div>
+      </div>
+      <ul class="features" aria-label="What WAYMARK does">
+        <li>${icon('ear', 'icon features__icon')}<span><strong>Hear who you pay.</strong> The account name is read back, with a warning for lookalikes, before any money moves.</span></li>
+        <li>${icon('fingerprint', 'icon features__icon')}<span><strong>Approve with a touch.</strong> Your fingerprint approves payments, so nothing secret is spoken or typed.</span></li>
+        <li>${icon('mic', 'icon features__icon')}<span><strong>Talk instead of tapping.</strong> WAYMARK speaks for itself, from sign-up onwards. No screen reader needed.</span></li>
+      </ul>
       <section class="notice" aria-labelledby="demo-h">
         <h2 id="demo-h">This is a demo</h2>
         <ul>
@@ -80,7 +97,7 @@ export function signin(state) {
     title: 'Sign in to the demo',
     html: `${h1('Sign in to the demo')}
       ${errorSummary(errs)}
-      <p>Step 1 of 3.</p>
+      ${steps(1)}
       <form data-form="phone" novalidate>
         ${textField({ id: 'phone', label: 'Mobile number', hint: 'Any Nigerian mobile number works in this demo, for example 0803 123 4567. It is not stored or sent anywhere.', error: errorFor(errs, 'phone'), value: state.form.phone ?? '', type: 'tel', inputmode: 'tel' })}
         <button class="button" type="submit">Continue</button>
@@ -95,7 +112,8 @@ export function otp(state) {
     title: 'Enter your code',
     html: `${h1('Enter your code')}
       ${errorSummary(errs)}
-      <p>Step 2 of 3. A real bank would text a code to your number ending ${dual(last4, last4.split('').join(' '))}. In this demo the code is ${dual(DEMO_OTP, DEMO_OTP.split('').join(' '))}, and it does not expire.</p>
+      ${steps(2)}
+      <p>A real bank would text a code to your number ending ${dual(last4, last4.split('').join(' '))}. In this demo the code is ${dual(DEMO_OTP, DEMO_OTP.split('').join(' '))}, and it does not expire.</p>
       <form data-form="otp" novalidate>
         ${textField({ id: 'otp', label: 'Code', hint: '6 digits.', error: errorFor(errs, 'otp'), value: state.form.otp ?? '', inputmode: 'numeric' })}
         <button class="button" type="submit">Continue</button>
@@ -110,12 +128,12 @@ export function secure(state) {
     html: `${h1('How do you want to approve payments?')}
       ${errorSummary(state.ui.errors)}
       ${available
-        ? `<p>Step 3 of 3. Your fingerprint is the fastest and most private way. One touch approves a payment, and nothing is spoken or typed, so nobody nearby can hear it.</p>
+        ? `${steps(3)}<p>Your fingerprint is the fastest and most private way. One touch approves a payment, and nothing is spoken or typed, so nobody nearby can hear it.</p>
            <div class="actions">
-             <button type="button" class="button" id="bio-setup" data-action="setup-biometric">Use my fingerprint</button>
+             <button type="button" class="button" id="bio-setup" data-action="setup-biometric">${icon('fingerprint')}<span>Use my fingerprint</span></button>
              <a class="button button--secondary" href="#create-pin"><span>Use a ${PIN} instead</span></a>
            </div>`
-        : `<p>Step 3 of 3. This phone or browser cannot use a fingerprint here, so you will create a demo ${PIN} instead.</p>
+        : `${steps(3)}<p>This phone or browser cannot use a fingerprint here, so you will create a demo ${PIN} instead.</p>
            <div class="actions"><a class="button" href="#create-pin"><span>Create a ${PIN}</span></a></div>`}`,
   };
 }
@@ -142,23 +160,29 @@ export function home(state) {
   return {
     title: 'Home',
     nav: 'home',
-    html: `${h1('Home')}
-      ${state.ui.flash ? `<p class="flash" role="status">${esc(state.ui.flash)}</p>` : ''}
-      <div class="actions"><a class="button button--talk" href="#talk">Talk to WAYMARK</a></div>
+    layout: 'wide',
+    html: `<div class="home">
+      <div class="home__main">
+      ${h1('Home')}
+      ${state.ui.flash ? `<p class="flash" role="status">${icon('check')}<span>${esc(state.ui.flash)}</span></p>` : ''}
+      <div class="actions"><a class="button button--talk" href="#talk">${icon('mic')}<span>Talk to WAYMARK</span></a></div>
       <section class="balance" aria-labelledby="bal-h">
         <h2 id="bal-h">Balance</h2>
         <p class="balance__amount"><span class="sr-only">Demo balance, </span>${money(state.bankData.account.balanceKobo)}</p>
+        <p class="balance__note" aria-hidden="true">Demo money. Nothing here is real.</p>
       </section>
       <section aria-labelledby="quick-h">
         <h2 id="quick-h">Pay again</h2>
         ${payeeButtons(state.bankData.beneficiaries)}
-        <p><a href="#pay-new">Pay a new account</a></p>
+        <p class="more-link"><a href="#pay-new">${icon('plus')}<span>Pay a new account</span></a></p>
       </section>
-      <section aria-labelledby="recent-h">
+      </div>
+      <section class="home__side" aria-labelledby="recent-h">
         <h2 id="recent-h">Recent activity</h2>
         <ol class="tx-list">${recent.map(txItem).join('')}</ol>
-        <p><a href="#activity">See all activity</a></p>
-      </section>`,
+        <p class="more-link"><a href="#activity"><span>See all activity</span>${icon('chevron')}</a></p>
+      </section>
+      </div>`,
   };
 }
 
@@ -168,7 +192,7 @@ export function activityList(state) {
     title: 'Activity',
     nav: 'activity',
     html: `${h1('Activity')}
-      <p>${items.length} transactions, newest first. Select one for details.</p>
+      <p class="muted">${items.length} transactions, newest first. Select one for details.</p>
       ${items.length
         ? `<ol class="tx-list">${items.map(txItem).join('')}</ol>`
         : '<p>No activity yet. When you pay someone, it will appear here.</p><p><a href="#pay">Pay someone</a></p>'}`,
@@ -206,9 +230,11 @@ export function pay(state) {
     title: 'Pay someone',
     nav: 'pay',
     html: `${h1('Pay someone')}
+      <h2 class="list-heading">Saved people</h2>
       ${payeeButtons(state.bankData.beneficiaries)}
+      <h2 class="list-heading">Someone new</h2>
       <ul class="choice-list">
-        <li><a class="choice choice--plain" href="#pay-new"><span class="choice__title">Pay a new account</span>${sep}<span class="choice__hint">Type an account number. We will tell you whose account it is before you pay.</span></a></li>
+        <li><a class="choice choice--plain" href="#pay-new"><span class="avatar avatar--new" aria-hidden="true">${icon('plus')}</span><span class="choice__body"><span class="choice__title">Pay a new account</span>${sep}<span class="choice__hint">Type an account number. We will tell you whose account it is before you pay.</span></span>${icon('chevron', 'icon choice__chevron')}</a></li>
       </ul>`,
   };
 }
@@ -220,7 +246,7 @@ export function payNew(state) {
   const bankDescribedBy = ['bank-hint', bankError && 'bank-error'].filter(Boolean).join(' ');
   const result = L.result
     ? `<section class="lookup-result${L.lookalike ? ' lookup-result--warn' : ''}" id="lookup-result" tabindex="-1" aria-labelledby="lookup-h">
-        <h2 id="lookup-h">${L.lookalike ? 'Check carefully' : 'Account found'}</h2>
+        <h2 id="lookup-h">${icon(L.lookalike ? 'warning' : 'check', 'icon lookup-result__icon')}${L.lookalike ? 'Check carefully' : 'Account found'}</h2>
         ${L.lookalike ? `<p class="warning"><strong>This is not your saved ${esc(L.lookalike.name)}.</strong> The name is similar, but the account number is different.</p>` : ''}
         <p>Account name: <strong class="payee-name">${esc(L.result.name)}</strong>, ${esc(bankName(L.result.bankCode))}, ${accountEnding(L.result.accountNumber)}.</p>
         ${L.spelled ? `<p class="spelled" aria-hidden="true">${esc(L.spelled)}</p>` : ''}
@@ -295,7 +321,7 @@ export function review(state) {
         ${biometric ? '' : `
           <p class="hint" id="pin-privacy">Your keyboard may read keys aloud as you touch them. Use headphones if you can.</p>
           ${textField({ id: 'pin', label: 'Demo PIN', error: errorFor(errs, 'pin'), type: 'password', inputmode: 'numeric', autocomplete: 'off', extra: 'maxlength="4" data-pin-count aria-label="Demo pin"' })}`}
-        <button class="button" type="submit" id="confirm-btn" ${busy ? 'disabled aria-disabled="true"' : ''}>${confirmLabel}</button>
+        <button class="button button--confirm" type="submit" id="confirm-btn" ${busy ? 'disabled aria-disabled="true" aria-busy="true"' : ''}>${biometric && !busy ? icon('fingerprint') : ''}<span>${confirmLabel}</span></button>
         <details class="demo-switch">
           <summary>Demo controls for judges</summary>
           <fieldset>
@@ -345,6 +371,7 @@ export function outcome(state, operationId) {
     title: copy.h,
     nav: 'pay',
     html: `<div class="outcome outcome--${t.state}">
+        <span class="outcome__icon">${icon(STATUS_ICON[t.state] ?? 'question')}</span>
         <p class="outcome__badge" aria-hidden="true">${esc(STATUS_LABEL[t.state])}</p>
         ${h1(copy.h)}
         <p class="lede">${copy.p(t)}${esc(failureNote)}</p>
@@ -381,6 +408,12 @@ const voiceLogItem = (entry) =>
 export const voiceLogHtml = (log) =>
   log.length ? log.map(voiceLogItem).join('') : '<li class="muted">Nothing yet.</li>';
 
+/** Which look the Talk button has, from its status line. */
+export function talkState(status) {
+  const key = Object.keys(TALK_STATUS).find((k) => TALK_STATUS[k] === status);
+  return { listening: 'listening', speaking: 'speaking', working: 'working', tap: 'tap' }[key] ?? 'idle';
+}
+
 /**
  * The voice screen, and the first screen anyone sees. Almost the whole screen is one button:
  * tap anywhere to talk. WAYMARK speaks for itself, so no screen reader is needed; with
@@ -394,14 +427,18 @@ export function talk(state) {
   return {
     title: 'Talk',
     nav: 'voice',
+    layout: 'talk',
     focus: '#talk-btn',
     html: `<h1 id="page-title" tabindex="-1" class="talk-title">WAYMARK</h1>
-      <button type="button" id="talk-btn" class="talk-target">
+      <button type="button" id="talk-btn" class="talk-target" data-state="${talkState(status)}">
+        <span class="talk-target__icon" aria-hidden="true">${icon('mic', 'icon talk-icon talk-icon--mic')}${icon('fingerprint', 'icon talk-icon talk-icon--fingerprint')}<span class="talk-bars"><i></i><i></i><i></i><i></i></span></span>
         <span class="talk-target__label">Tap anywhere to talk</span>
         <span class="talk-target__status" id="talk-status" aria-hidden="true">${esc(status)}</span>
       </button>
+      <div class="talk-foot">
       <p class="talk-note">Demo only. No real money moves. ${AI_ENDPOINT ? 'Your words are sent to Google: Chrome turns speech into text, and Gemini works out what you meant. Your balance and saved payees stay on this phone.' : 'In Chrome, your speech is sent to Google to turn it into text.'}</p>
-      <p><a href="${state.signedIn ? '#home' : '#start'}">Use the screens instead</a></p>
+      <p class="talk-switch"><a href="${state.signedIn ? '#home' : '#start'}">Use the screens instead</a></p>
+      </div>
       <details class="talk-more">
         <summary>Conversation, and typing instead</summary>
         <ol class="voice-log" id="voice-log">${voiceLogHtml(state.voice.log)}</ol>

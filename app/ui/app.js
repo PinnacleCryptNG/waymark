@@ -126,6 +126,7 @@ function render() {
   const screen = SCREENS[route.name](state, route.param);
   const main = document.getElementById('main');
   main.innerHTML = screen.html;
+  main.dataset.layout = screen.layout ?? '';
   document.title = `${screen.title} · WAYMARK demo`;
   updateNav(screen.nav);
 
@@ -258,6 +259,9 @@ function talkStatus(text) {
   state.voice.status = text;
   const el = document.getElementById('talk-status');
   if (el) el.textContent = text;
+  // The big button shows the state too (listening, speaking, working, waiting for a fingerprint).
+  const btn = document.getElementById('talk-btn');
+  if (btn) btn.dataset.state = screens.talkState(text);
 }
 
 function makeAssistant() {
@@ -618,6 +622,8 @@ const ACTIONS = {
 // Any tap on the Talk screen that is not on a link, form or the details toggle goes to the
 // conversation. This is what makes "tap anywhere" true, with or without a screen reader.
 document.addEventListener('click', (e) => {
+  // "Skip to content" must not change the address: the address is the router.
+  if (e.target.closest('.skip-link')) { e.preventDefault(); focusElement(document.getElementById('page-title') ?? main); return; }
   if (!['talk', 'welcome'].includes(parseRoute().name)) return;
   if (e.target.closest('a, input, select, textarea, summary, details, form, nav')) return;
   e.preventDefault();

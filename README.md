@@ -159,6 +159,18 @@ scripts/    zero-dependency static server
 docs/       PRD and review (Word)
 ```
 
+## Design
+
+The design system is described in [docs/DESIGN.md](docs/DESIGN.md). In short:
+
+- **Identity:** a waymark yellow "blaze" on deep green.
+- **Type:** Atkinson Hyperlegible, a typeface made for low-vision readers.
+- **Layout:** rows on rules instead of stacks of cards, and a yellow-and-dark focus ring.
+- **Talk button:** each state (listening, speaking, working, waiting for a fingerprint) has its own shape as
+  well as its own words.
+
+The font is self-hosted under the SIL Open Font License (`app/fonts/OFL.txt`).
+
 ## How it behaves
 
 - Money is integer kobo throughout. The fee is a flat ₦10.00 demo fee.
